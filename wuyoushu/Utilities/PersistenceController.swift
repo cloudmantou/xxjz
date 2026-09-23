@@ -1,7 +1,8 @@
 import Foundation
 import CoreData
+import Combine
 
-struct PersistenceController {
+final class PersistenceController: ObservableObject {
     static let shared = PersistenceController()
 
     static let preview: PersistenceController = {
@@ -73,23 +74,49 @@ struct PersistenceController {
         return controller
     }()
 
-    let container: NSPersistentCloudKitContainer
-    let bookkeepingCloudSyncEnabled: Bool
+    @Published private(set) var container: NSPersistentCloudKitContainer
+    @Published private(set) var bookkeepingCloudSyncEnabled: Bool
+    @Published private(set) var loadFailure: String?
+    let storeURL: URL?
+    private let inMemory: Bool
 
     init(inMemory: Bool = false) {
+        self.inMemory = inMemory
         let userWantsCloud = !inMemory && (UserDefaults.standard.object(forKey: Constants.ICloud.cloudSyncPreferenceKey) as? Bool ?? true)
-        let requestedCloudSync = userWantsCloud
-        let model = Self.makeModel(enableUniqueConstraints: !requestedCloudSync)
-        let defaultStoreURL = NSPersistentContainer.defaultDirectoryURL()
+        let model = Self.makeModel(enableUniqueConstraints: false)
+        let resolvedStoreURL = NSPersistentContainer.defaultDirectoryURL()
             .appendingPathComponent("AssetLife.sqlite")
+        storeURL = inMemory ? nil : resolvedStoreURL
         let loaded = Self.buildContainer(
             model: model,
-            storeURL: defaultStoreURL,
+            storeURL: resolvedStoreURL,
             inMemory: inMemory,
-            cloudSyncRequested: requestedCloudSync
+            cloudSyncRequested: userWantsCloud
         )
         container = loaded.container
         bookkeepingCloudSyncEnabled = loaded.cloudSyncEnabled
+        loadFailure = loaded.error?.localizedDescription
+        configureViewContext(container)
+    }
+
+    var isStoreReady: Bool { loadFailure == nil }
+
+    func retryStoreLoad() {
+        guard !inMemory, let storeURL else { return }
+        let wantsCloud = UserDefaults.standard.object(forKey: Constants.ICloud.cloudSyncPreferenceKey) as? Bool ?? true
+        let loaded = Self.buildContainer(
+            model: Self.makeModel(enableUniqueConstraints: false),
+            storeURL: storeURL,
+            inMemory: false,
+            cloudSyncRequested: wantsCloud
+        )
+        container = loaded.container
+        bookkeepingCloudSyncEnabled = loaded.cloudSyncEnabled
+        loadFailure = loaded.error?.localizedDescription
+        configureViewContext(container)
+    }
+
+    private func configureViewContext(_ container: NSPersistentCloudKitContainer) {
         container.viewContext.automaticallyMergesChangesFromParent = true
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
     }
@@ -99,7 +126,7 @@ struct PersistenceController {
         storeURL: URL,
         inMemory: Bool,
         cloudSyncRequested: Bool
-    ) -> (container: NSPersistentCloudKitContainer, cloudSyncEnabled: Bool) {
+    ) -> (container: NSPersistentCloudKitContainer, cloudSyncEnabled: Bool, error: Error?) {
         var container = NSPersistentCloudKitContainer(name: "AssetLife", managedObjectModel: model)
         container.persistentStoreDescriptions = [
             makeStoreDescription(
@@ -111,7 +138,7 @@ struct PersistenceController {
 
         if let error = loadPersistentStoresSync(container: container) {
             guard cloudSyncRequested, !inMemory else {
-                fatalError("Core Data persistent store load failed: \(error)")
+                return (container, false, error)
             }
 
             // CloudKit can be unavailable for many reasons (account/network/capability mismatch).
@@ -128,12 +155,17 @@ struct PersistenceController {
             ]
 
             if let fallbackError = loadPersistentStoresSync(container: container) {
-                fatalError("Core Data fallback store load failed: \(fallbackError)")
+                let combinedError = NSError(
+                    domain: "PersistenceController",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "iCloud 存储加载失败：\(error.localizedDescription)\n本地存储加载失败：\(fallbackError.localizedDescription)"]
+                )
+                return (container, false, combinedError)
             }
-            return (container, false)
+            return (container, false, nil)
         }
 
-        return (container, cloudSyncRequested && !inMemory)
+        return (container, cloudSyncRequested && !inMemory, nil)
     }
 
     private static func makeStoreDescription(

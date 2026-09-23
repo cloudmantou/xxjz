@@ -120,7 +120,7 @@ struct StatisticsHomeView: View {
         var map: [Int: Double] = [:]
         let calendar = Calendar.current
 
-        for tx in monthTransactions where !tx.isIncome && !tx.notInBudget {
+        for tx in monthTransactions where !tx.isIncome && !tx.notInBudget && tx.categoryKey != "transfer" {
             let day = calendar.component(.day, from: tx.date)
             map[day, default: 0] += tx.normalizedAmount
         }
@@ -135,7 +135,7 @@ struct StatisticsHomeView: View {
         let calendar = Calendar.current
         var dailyMap: [Date: Double] = [:]
 
-        for tx in monthTransactions where !tx.isIncome && !tx.notInBudget {
+        for tx in monthTransactions where !tx.isIncome && !tx.notInBudget && tx.categoryKey != "transfer" {
             let dayStart = calendar.startOfDay(for: tx.date)
             dailyMap[dayStart, default: 0] += tx.normalizedAmount
         }

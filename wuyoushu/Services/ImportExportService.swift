@@ -45,8 +45,21 @@ struct ImportBatch {
     let importedAt: Date
     let recordCount: Int
     let importedCount: Int
+    let duplicateCount: Int
     let failedCount: Int
+    let invalidDateCount: Int
     let autoCreatedCategoryCount: Int  // 自动创建的新分类数量
+}
+
+private struct ImportDeduplicationKey: Hashable, Sendable {
+    let minute: Int64
+    let amountInCents: Int64
+    let isIncome: Bool
+    let categoryKey: String
+    let subcategoryKey: String
+    let fundAccountKey: String
+    let note: String
+    let merchant: String
 }
 
 // MARK: - Category Matching
@@ -75,6 +88,36 @@ final class ImportExportService: ObservableObject {
     static let shared = ImportExportService()
 
     private let viewContext: NSManagedObjectContext
+    private(set) var invalidDateRowCount = 0
+    private lazy var dateFormatters: [DateFormatter] = {
+        let formats = [
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy/MM/dd HH:mm:ss",
+            "yyyy-MM-dd HH:mm",
+            "yyyy/MM/dd HH:mm",
+            "yyyy-MM-dd",
+            "yyyy/MM/dd",
+            "MM-dd-yyyy",
+            "yyyy年MM月dd日 HH:mm:ss",
+            "yyyy年M月d日 HH:mm:ss",
+            "yyyy年MM月dd日 HH:mm",
+            "yyyy年M月d日 HH:mm"
+        ]
+        return formats.map { format in
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone.current
+            formatter.dateFormat = format
+            formatter.isLenient = false
+            return formatter
+        }
+    }()
+    private lazy var isoDateFormatter = ISO8601DateFormatter()
+    private lazy var fractionalISODateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 
     init(context: NSManagedObjectContext = PersistenceController.shared.container.viewContext) {
         self.viewContext = context
@@ -117,14 +160,19 @@ final class ImportExportService: ObservableObject {
         startRowIndex: Int = 0
     ) -> [ImportBillRecord] {
         var records: [ImportBillRecord] = []
+        invalidDateRowCount = 0
 
         for (index, row) in rows.enumerated() where index >= startRowIndex {
             guard let amount = parseAmount(row[safe: columnMapping.amountColumn]), amount > 0 else {
                 continue
             }
+            guard let date = parseDate(row[safe: columnMapping.dateColumn]) else {
+                invalidDateRowCount += 1
+                continue
+            }
 
             let record = ImportBillRecord(
-                date: parseDate(row[safe: columnMapping.dateColumn]),
+                date: date,
                 amount: amount,
                 isIncome: columnMapping.typeColumn.flatMap { row[safe: $0] }.map { val in
                     let t = val.trimmingCharacters(in: .whitespaces)
@@ -271,35 +319,78 @@ final class ImportExportService: ObservableObject {
     /// 执行导入（批量插入 CoreData）
     func executeImport(
         records: [ImportBillRecord],
+        invalidDateCount: Int = 0,
         batchId: UUID = UUID()
     ) async throws -> ImportBatch {
         var importedCount = 0
+        var duplicateCount = 0
         var failedCount = 0
 
-        for record in records {
-            guard let categoryKey = record.matchedCategoryKey else {
-                failedCount += 1
-                continue
-            }
-
-            let tx = BookkeepingTransaction(
-                context: viewContext,
-                amount: record.amount,
-                categoryKey: categoryKey,
-                subcategoryKey: record.matchedSubcategoryKey,
-                note: record.note,
-                date: record.date,
-                isIncome: record.isIncome,
-                fundAccountKey: matchFundAccount(record.fundAccountName),
-                notInBudget: false,
-                billSource: "import:\(batchId.uuidString)",
-                merchantName: record.merchantName
-            )
-            viewContext.insert(tx)
-            importedCount += 1
+        var seenKeys = Set<ImportDeduplicationKey>()
+        try viewContext.performAndWait {
+            let existingTransactions = try viewContext.fetch(BookkeepingTransaction.fetchRequest())
+            seenKeys = Set(existingTransactions.map { Self.transactionKey(for: $0) })
         }
 
-        try viewContext.save()
+        guard let coordinator = viewContext.persistentStoreCoordinator else {
+            throw ImportError.persistenceUnavailable
+        }
+        let importContext = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
+        importContext.persistentStoreCoordinator = coordinator
+        importContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        var importedObjectIDs: [NSManagedObjectID] = []
+        let fundAccountKeys = Dictionary(uniqueKeysWithValues: records.map { ($0.id, matchFundAccount($0.fundAccountName)) })
+
+        do {
+            try importContext.performAndWait {
+                let committedTransactions = try importContext.fetch(BookkeepingTransaction.fetchRequest())
+                seenKeys.formUnion(committedTransactions.map { Self.transactionKey(for: $0) })
+
+                for record in records {
+                    guard let categoryKey = record.matchedCategoryKey else {
+                        failedCount += 1
+                        continue
+                    }
+
+                    let fundAccountKey = fundAccountKeys[record.id] ?? nil
+                    let key = Self.transactionKey(for: record, categoryKey: categoryKey, fundAccountKey: fundAccountKey)
+                    guard seenKeys.insert(key).inserted else {
+                        duplicateCount += 1
+                        continue
+                    }
+
+                    let tx = BookkeepingTransaction(
+                        context: importContext,
+                        amount: record.amount,
+                        categoryKey: categoryKey,
+                        subcategoryKey: record.matchedSubcategoryKey,
+                        note: record.note,
+                        date: record.date,
+                        isIncome: record.isIncome,
+                        fundAccountKey: fundAccountKey,
+                        notInBudget: false,
+                        billSource: "import:\(batchId.uuidString)",
+                        merchantName: record.merchantName
+                    )
+                    importedObjectIDs.append(tx.objectID)
+                    importedCount += 1
+                }
+
+                if importContext.hasChanges {
+                    try importContext.save()
+                }
+            }
+        } catch {
+            importContext.performAndWait { importContext.rollback() }
+            throw error
+        }
+
+        if !importedObjectIDs.isEmpty {
+            NSManagedObjectContext.mergeChanges(
+                fromRemoteContextSave: [NSInsertedObjectsKey: importedObjectIDs],
+                into: [viewContext]
+            )
+        }
 
         return ImportBatch(
             id: batchId,
@@ -307,8 +398,72 @@ final class ImportExportService: ObservableObject {
             importedAt: Date(),
             recordCount: records.count,
             importedCount: importedCount,
+            duplicateCount: duplicateCount,
             failedCount: failedCount,
+            invalidDateCount: invalidDateCount,
             autoCreatedCategoryCount: 0  // 由 ViewModel 单独跟踪
+        )
+    }
+
+    nonisolated private static func transactionKey(for transaction: BookkeepingTransaction) -> ImportDeduplicationKey {
+        Self.transactionKey(
+            date: transaction.date,
+            amount: transaction.normalizedAmount,
+            isIncome: transaction.isIncome,
+            categoryKey: transaction.categoryKey,
+            subcategoryKey: transaction.subcategoryKey,
+            fundAccountKey: transaction.fundAccountKey,
+            note: transaction.note,
+            merchant: transaction.merchantName
+        )
+    }
+
+    nonisolated private static func transactionKey(
+        for record: ImportBillRecord,
+        categoryKey: String,
+        fundAccountKey: String?
+    ) -> ImportDeduplicationKey {
+        Self.transactionKey(
+            date: record.date,
+            amount: record.amount,
+            isIncome: record.isIncome,
+            categoryKey: categoryKey,
+            subcategoryKey: record.matchedSubcategoryKey,
+            fundAccountKey: fundAccountKey,
+            note: record.note,
+            merchant: record.merchantName
+        )
+    }
+
+    nonisolated private static func transactionKey(
+        date: Date,
+        amount: Double,
+        isIncome: Bool,
+        categoryKey: String,
+        subcategoryKey: String?,
+        fundAccountKey: String?,
+        note: String?,
+        merchant: String?
+    ) -> ImportDeduplicationKey {
+        func normalized(_ value: String?) -> String {
+            (value ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .split(whereSeparator: \.isWhitespace)
+                .joined(separator: " ")
+                .lowercased()
+        }
+        return ImportDeduplicationKey(
+            minute: Int64(date.timeIntervalSince1970 / 60),
+            amountInCents: {
+                let scaled = (abs(amount) * 100).rounded()
+                return scaled >= Double(Int64.max) ? Int64.max : Int64(scaled)
+            }(),
+            isIncome: isIncome,
+            categoryKey: normalized(categoryKey),
+            subcategoryKey: normalized(subcategoryKey),
+            fundAccountKey: normalized(fundAccountKey),
+            note: normalized(note),
+            merchant: normalized(merchant)
         )
     }
 
@@ -384,7 +539,7 @@ final class ImportExportService: ObservableObject {
         return (nil, nil, 0.0)
     }
 
-    private func matchFundAccount(_ name: String?) -> String? {
+    nonisolated private func matchFundAccount(_ name: String?) -> String? {
         guard let name = name else { return nil }
         let lowercased = name.lowercased()
         return FundAccount.all.first { $0.name.lowercased().contains(lowercased) }?.key
@@ -407,44 +562,22 @@ final class ImportExportService: ObservableObject {
             string = "-" + String(string.dropFirst().dropLast())
         }
 
-        return Double(string)
+        guard let amount = Double(string), amount.isFinite else { return nil }
+        return amount
     }
 
-    private func parseDate(_ string: String?) -> Date {
-        guard let string = string?.trimmingCharacters(in: .whitespaces) else { return Date() }
-
-        let formats = [
-            "yyyy-MM-dd HH:mm:ss",
-            "yyyy/MM/dd HH:mm:ss",
-            "yyyy-MM-dd HH:mm",
-            "yyyy/MM/dd HH:mm",
-            "yyyy-MM-dd",
-            "yyyy/MM/dd",
-            "MM-dd-yyyy",
-            "yyyy年MM月dd日 HH:mm:ss",
-            "yyyy年M月d日 HH:mm:ss",
-            "yyyy年MM月dd日 HH:mm",
-            "yyyy年M月d日 HH:mm"
-        ]
-
-        let formatters: [DateFormatter] = formats.map { format in
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = TimeZone.current
-            formatter.dateFormat = format
-            return formatter
-        }
-
-        for formatter in formatters {
+    private func parseDate(_ string: String?) -> Date? {
+        guard let string = string?.trimmingCharacters(in: .whitespacesAndNewlines), !string.isEmpty else { return nil }
+        for formatter in dateFormatters {
             if let date = formatter.date(from: string) {
                 return date
             }
         }
 
-        if let isoDate = ISO8601DateFormatter().date(from: string) {
+        if let isoDate = isoDateFormatter.date(from: string) {
             return isoDate
         }
-        return Date()
+        return fractionalISODateFormatter.date(from: string)
     }
 }
 
@@ -475,12 +608,14 @@ struct ExportOptions {
 enum ImportError: LocalizedError {
     case emptyFile
     case invalidFormat
+    case persistenceUnavailable
     case parseError(String)
 
     var errorDescription: String? {
         switch self {
         case .emptyFile: return "文件为空"
         case .invalidFormat: return "不支持的文件格式"
+        case .persistenceUnavailable: return "本地数据库当前不可用，账单没有导入。"
         case .parseError(let msg): return "解析错误: \(msg)"
         }
     }

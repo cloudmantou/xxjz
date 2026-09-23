@@ -42,7 +42,6 @@ final class BookkeepingViewModel: ObservableObject {
     // MARK: - Load Statistics
 
     func loadStatistics(from context: NSManagedObjectContext) {
-        let calendar = Calendar.current
         let startOfMonth = selectedMonth.startOfMonth
         let endOfMonth = selectedMonth.endOfMonth
 
@@ -55,13 +54,13 @@ final class BookkeepingViewModel: ObservableObject {
 
         do {
             let transactions = try context.fetch(request)
-            monthlyIncome = transactions.filter { $0.isIncome }.reduce(0) { $0 + $1.normalizedAmount }
-            monthlyExpense = transactions.filter { !$0.isIncome && !$0.notInBudget }.reduce(0) { $0 + $1.normalizedAmount }
+            monthlyIncome = transactions.filter { $0.isIncome && $0.categoryKey != "transfer" }.reduce(0) { $0 + $1.normalizedAmount }
+            monthlyExpense = transactions.filter { !$0.isIncome && !$0.notInBudget && $0.categoryKey != "transfer" }.reduce(0) { $0 + $1.normalizedAmount }
             transactionCount = transactions.count
 
             // Category breakdown (expenses only, excluding notInBudget)
             var catMap: [String: (amount: Double, count: Int)] = [:]
-            for t in transactions where !t.isIncome && !t.notInBudget {
+            for t in transactions where !t.isIncome && !t.notInBudget && t.categoryKey != "transfer" {
                 let current = catMap[t.categoryKey] ?? (0, 0)
                 catMap[t.categoryKey] = (current.amount + t.normalizedAmount, current.count + 1)
             }
@@ -70,7 +69,7 @@ final class BookkeepingViewModel: ObservableObject {
 
             // Daily spending (excluding notInBudget)
             var dailyMap: [Date: Double] = [:]
-            for t in transactions where !t.isIncome && !t.notInBudget {
+            for t in transactions where !t.isIncome && !t.notInBudget && t.categoryKey != "transfer" {
                 let dayStart = t.date.startOfDay
                 dailyMap[dayStart, default: 0] += t.normalizedAmount
             }
@@ -100,8 +99,8 @@ final class BookkeepingViewModel: ObservableObject {
 
             do {
                 let transactions = try context.fetch(request)
-                let income = transactions.filter { $0.isIncome }.reduce(0) { $0 + $1.normalizedAmount }
-                let expense = transactions.filter { !$0.isIncome }.reduce(0) { $0 + $1.normalizedAmount }
+                let income = transactions.filter { $0.isIncome && $0.categoryKey != "transfer" }.reduce(0) { $0 + $1.normalizedAmount }
+                let expense = transactions.filter { !$0.isIncome && !$0.notInBudget && $0.categoryKey != "transfer" }.reduce(0) { $0 + $1.normalizedAmount }
                 trend.append((start, income, expense))
             } catch {
                 trend.append((start, 0, 0))
@@ -133,7 +132,7 @@ final class BookkeepingViewModel: ObservableObject {
 
             let transactions = try context.fetch(txRequest)
             var spentMap: [String: Double] = [:]
-            for t in transactions where !t.notInBudget {
+            for t in transactions where !t.isIncome && !t.notInBudget && t.categoryKey != "transfer" {
                 spentMap[t.categoryKey, default: 0] += t.normalizedAmount
             }
 

@@ -319,6 +319,12 @@ struct ProfileView: View {
             } label: {
                 settingsRowLabel(icon: "square.and.arrow.up", title: "导出账单")
             }
+            Divider().padding(.leading, 52)
+            NavigationLink {
+                LocalBackupView()
+            } label: {
+                settingsRowLabel(icon: "externaldrive.fill", title: "完整数据备份")
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 6)

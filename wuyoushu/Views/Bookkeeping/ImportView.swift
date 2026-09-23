@@ -312,6 +312,11 @@ struct ImportView: View {
                 Text("将导入 \(viewModel.importableCount) 条账单记录")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                if viewModel.invalidDateCount > 0 {
+                    Text("另有 \(viewModel.invalidDateCount) 条日期无法识别，确认后会跳过。")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
 
             VStack(spacing: 8) {
@@ -392,6 +397,18 @@ struct ImportView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
+                    if viewModel.duplicateCount > 0 {
+                        Text("跳过重复记录 \(viewModel.duplicateCount) 条")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+
+                    if viewModel.invalidDateCount > 0 {
+                        Text("跳过日期无效记录 \(viewModel.invalidDateCount) 条")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+
                     if viewModel.failedCount > 0 {
                         Text("失败 \(viewModel.failedCount) 条（类别无法匹配）")
                             .font(.caption)
@@ -416,6 +433,12 @@ struct ImportView: View {
                     Text(viewModel.errorMessage ?? "未知错误")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+
+                    if viewModel.invalidDateCount > 0 {
+                        Text("另有 \(viewModel.invalidDateCount) 条记录因日期无法识别而跳过。")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
             }
 
@@ -477,7 +500,9 @@ final class ImportViewModel: ObservableObject {
     // Result
     @Published var importSuccess = false
     @Published var importedCount = 0
+    @Published var duplicateCount = 0
     @Published var failedCount = 0
+    @Published var invalidDateCount = 0
     @Published var autoCreatedCategoryCount = 0  // 自动创建的新分类数量
 
     private let importService = ImportExportService.shared
@@ -569,6 +594,8 @@ final class ImportViewModel: ObservableObject {
 
     func executeImport() async {
         step = .importing
+        let originalCategoryIDs = Set(CustomCategoryStore.shared.categories.map(\.id))
+        var newlyCreatedCategories: [CustomCategory] = []
 
         do {
             let mapping = ColumnMapping(
@@ -583,6 +610,7 @@ final class ImportViewModel: ObservableObject {
             )
 
             var records = importService.convertToBillRecords(rows: allRows, columnMapping: mapping)
+            invalidDateCount = importService.invalidDateRowCount
             if records.isEmpty {
                 let amountHeader: String = {
                     guard let idx = amountColumnIndex, idx >= 0, idx < firstRow.count else { return "未知列" }
@@ -646,6 +674,7 @@ final class ImportViewModel: ObservableObject {
 
             // 跟踪自动创建的分类数量
             autoCreatedCategoryCount = createdMappings.count
+            newlyCreatedCategories = CustomCategoryStore.shared.categories.filter { !originalCategoryIDs.contains($0.id) }
 
             // 将新创建的分类映射到记录
             for (i, record) in records.enumerated() {
@@ -655,13 +684,20 @@ final class ImportViewModel: ObservableObject {
                 }
             }
 
-            let batch = try await importService.executeImport(records: records)
+            let batch = try await importService.executeImport(
+                records: records,
+                invalidDateCount: invalidDateCount
+            )
 
             importedCount = batch.importedCount
+            duplicateCount = batch.duplicateCount
             failedCount = batch.failedCount
             importSuccess = true
             step = .result
         } catch {
+            for category in newlyCreatedCategories {
+                CustomCategoryStore.shared.delete(category)
+            }
             errorMessage = error.localizedDescription
             importSuccess = false
             step = .result
@@ -722,6 +758,7 @@ final class ImportViewModel: ObservableObject {
         )
 
         importRecords = importService.convertToBillRecords(rows: allRows, columnMapping: mapping)
+        invalidDateCount = importService.invalidDateRowCount
         autoMatchedResults = importService.autoMatchCategories(records: importRecords)
 
         // 将自动匹配结果写回 importRecords，避免已匹配的项出现在待处理列表
