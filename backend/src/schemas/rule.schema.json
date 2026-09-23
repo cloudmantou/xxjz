@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wuyoushu/rule.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ruleId",
+    "keyWord",
+    "type",
+    "memberCateId",
+    "billsBookId",
+    "keyWordSource",
+    "fundAccountId"
+  ],
+  "properties": {
+    "ruleId": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "keyWord": {
+      "type": "string",
+      "minLength": 1
+    },
+    "memberId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "type": {
+      "type": "integer",
+      "enum": [
+        1,
+        2,
+        5
+      ]
+    },
+    "memberCateId": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "billsBookId": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "keyWordSource": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 7
+    },
+    "fundAccountId": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "memberTagIds": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "createDate": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "updateDate": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "searchTexts": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ruleId",
+          "ruleKind",
+          "billSource",
+          "minMatchValue",
+          "matchType",
+          "isFuzzy",
+          "isFuzzyLastValue",
+          "isOptional",
+          "columnCount",
+          "candidateType",
+          "subCandidateType"
+        ],
+        "properties": {
+          "key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ruleId": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "ruleKind": {
+            "type": "integer",
+            "enum": [
+              0,
+              1,
+              2
+            ]
+          },
+          "billSource": {
+            "type": "integer",
+            "enum": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          "minMatchValue": {
+            "type": "number",
+            "minimum": 0
+          },
+          "matchType": {
+            "type": "integer",
+            "enum": [
+              1,
+              2,
+              3,
+              4
+            ]
+          },
+          "isFuzzy": {
+            "type": "boolean"
+          },
+          "isFuzzyLastValue": {
+            "type": "boolean"
+          },
+          "isOptional": {
+            "type": "boolean"
+          },
+          "isMutableLine": {
+            "type": "boolean"
+          },
+          "columnCount": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "alignment": {
+            "type": "integer",
+            "enum": [
+              0,
+              1,
+              2,
+              3
+            ]
+          },
+          "candidateType": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ]
+          },
+          "subCandidateType": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}

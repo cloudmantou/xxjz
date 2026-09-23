@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="21754" systemVersion="22F82" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+    <entity name="AssetItem" representedClassName="AssetItem" syncable="YES">
+        <attribute name="category" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="currentValue" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="imageData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="name" attributeType="String"/>
+        <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="purchaseDate" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="purchasePrice" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="statusRaw" attributeType="String" defaultValueString="active"/>
+        <attribute name="isFavorite" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="updatedAt" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="extraCosts" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="AssetExtraCost" inverseName="asset" inverseEntity="AssetExtraCost"/>
+        <relationship name="saleRecords" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="AssetSaleRecord" inverseName="asset" inverseEntity="AssetSaleRecord"/>
+    </entity>
+    <entity name="AssetExtraCost" representedClassName="AssetExtraCost" syncable="YES">
+        <attribute name="amount" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="costType" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="date" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="notes" optional="YES" attributeType="String"/>
+        <relationship name="asset" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="AssetItem" inverseName="extraCosts" inverseEntity="AssetItem"/>
+    </entity>
+    <entity name="AssetSaleRecord" representedClassName="AssetSaleRecord" syncable="YES">
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="platform" optional="YES" attributeType="String"/>
+        <attribute name="saleDate" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="salePrice" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <relationship name="asset" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="AssetItem" inverseName="saleRecords" inverseEntity="AssetItem"/>
+    </entity>
+    <entity name="WishlistItem" representedClassName="WishlistItem" syncable="YES">
+        <attribute name="category" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="imageData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="isPurchased" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="name" attributeType="String"/>
+        <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="priority" attributeType="Integer 16" defaultValueString="3" usesScalarValueType="YES"/>
+        <attribute name="targetPrice" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="targetDailyCost" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="updatedAt" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="platformPrices" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WishlistPlatformPrice" inverseName="wishlistItem" inverseEntity="WishlistPlatformPrice"/>
+        <relationship name="priceHistories" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="WishlistPriceHistory" inverseName="wishlistItem" inverseEntity="WishlistPriceHistory"/>
+    </entity>
+    <entity name="WishlistPlatformPrice" representedClassName="WishlistPlatformPrice" syncable="YES">
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="lastUpdated" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="platform" attributeType="String"/>
+        <attribute name="price" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="url" optional="YES" attributeType="String"/>
+        <relationship name="wishlistItem" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WishlistItem" inverseName="platformPrices" inverseEntity="WishlistItem"/>
+    </entity>
+    <entity name="WishlistPriceHistory" representedClassName="WishlistPriceHistory" syncable="YES">
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="price" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="recordedAt" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="wishlistItem" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="WishlistItem" inverseName="priceHistories" inverseEntity="WishlistItem"/>
+    </entity>
+</model>

@@ -1,0 +1,143 @@
+name: AssetLife
+options:
+  bundleIdPrefix: com.assetlife
+  deploymentTarget:
+    iOS: "15.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: "X56YC4Y99L"
+    CODE_SIGN_STYLE: Automatic
+
+packages:
+  SQLite:
+    url: https://github.com/stephencelis/SQLite.swift
+    from: "0.15.0"
+
+targets:
+  AssetLife:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: wuyoushu
+        excludes:
+          - "**/*.xcodeproj"
+          - "**/*.xcworkspace"
+          - "**/*.yml"
+      - path: BookkeepingIntentsExtension/BookkeepingIntents.intentdefinition
+    dependencies:
+      - target: BookkeepingWidget
+      - target: ShareExtension
+      - target: BookkeepingIntentsExtension
+      - package: SQLite
+    settings:
+      base:
+        INFOPLIST_FILE: Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.assetlife.app
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_EMIT_LOC_STRINGS: YES
+        IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+        CODE_SIGN_ENTITLEMENTS: "wuyoushu/wuyoushu.entitlements"
+
+  BookkeepingWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: BookkeepingWidget
+    dependencies:
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.assetlife.app.BookkeepingWidget
+        INFOPLIST_FILE: BookkeepingWidget/Info.plist
+        GENERATE_INFOPLIST_FILE: YES
+        IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+        SWIFT_EMIT_LOC_STRINGS: YES
+        INFOPLIST_KEY_CFBundleDisplayName: "记账概览"
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: ""
+        CODE_SIGN_IDENTITY: "Apple Development"
+        INFOPLIST_KEY_NSExtensionPointIdentifier: "com.apple.widgetkit-extension"
+
+  ShareExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: ShareExtension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.assetlife.app.ShareExtension
+        INFOPLIST_FILE: ShareExtension/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+        SWIFT_EMIT_LOC_STRINGS: YES
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: "ShareExtension/ShareExtension.entitlements"
+        CODE_SIGN_IDENTITY: "Apple Development"
+        INFOPLIST_KEY_CFBundleDisplayName: "小西记账"
+        SWIFT_VERSION: "5.9"
+
+  BookkeepingIntentsExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: BookkeepingIntentsExtension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.assetlife.app.BookkeepingIntentsExtension
+        INFOPLIST_FILE: BookkeepingIntentsExtension/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+        SWIFT_EMIT_LOC_STRINGS: YES
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: "BookkeepingIntentsExtension/BookkeepingIntentsExtension.entitlements"
+        CODE_SIGN_IDENTITY: "Apple Development"
+        INFOPLIST_KEY_CFBundleDisplayName: "小西记账快捷操作"
+        SWIFT_VERSION: "5.9"
+        INTENTS_EXTENSION: YES
+
+  AssetLifeTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: wuyoushuTests
+    dependencies:
+      - target: AssetLife
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/AssetLife.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/AssetLife"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+schemes:
+  AssetLife:
+    build:
+      targets:
+        AssetLife: all
+        AssetLifeTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - AssetLifeTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

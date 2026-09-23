@@ -1,0 +1,71 @@
+CREATE TABLE IF NOT EXISTS rule_snapshots (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  snapshot_ref VARCHAR(191) NOT NULL UNIQUE,
+  base_rules_version INT NOT NULL,
+  patch_rules_version INT NOT NULL,
+  config_version INT NOT NULL,
+  checksum VARCHAR(255) NOT NULL,
+  etag VARCHAR(255) NOT NULL,
+  artifact_json JSON NOT NULL,
+  validation_result JSON NOT NULL,
+  parent_release_id BIGINT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS rule_patches (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  patch_ref VARCHAR(191) NOT NULL UNIQUE,
+  base_snapshot_ref VARCHAR(191) NULL,
+  base_release_id BIGINT NULL,
+  patch_rules_version INT NOT NULL,
+  config_version INT NOT NULL,
+  checksum VARCHAR(255) NOT NULL,
+  artifact_json JSON NOT NULL,
+  validation_result JSON NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS rule_releases (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  release_ref VARCHAR(191) NOT NULL UNIQUE,
+  artifact_type VARCHAR(32) NOT NULL,
+  snapshot_ref VARCHAR(191) NOT NULL,
+  patch_ref VARCHAR(191) NULL,
+  parent_release_id BIGINT NULL,
+  base_rules_version INT NOT NULL,
+  patch_rules_version INT NOT NULL,
+  config_version INT NOT NULL,
+  publish_time DATETIME NOT NULL,
+  checksum VARCHAR(255) NOT NULL,
+  etag VARCHAR(255) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  target_selector JSON NOT NULL,
+  rollout_strategy JSON NOT NULL,
+  artifact_json JSON NOT NULL,
+  full_rules_json JSON NOT NULL,
+  tombstones JSON NOT NULL,
+  noise_keywords JSON NOT NULL,
+  note TEXT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS rule_emergency_blocks (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  fingerprint VARCHAR(191) NOT NULL UNIQUE,
+  identity JSON NOT NULL,
+  expires_at DATETIME NULL,
+  reason TEXT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'active',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS rule_runtime_state (
+  id TINYINT(1) NOT NULL PRIMARY KEY,
+  rules_config_version INT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO rule_runtime_state (id, rules_config_version)
+VALUES (1, 0);

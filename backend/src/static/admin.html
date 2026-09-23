@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>小西记账管理面板</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f7fb;
+        --card: #ffffff;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --line: #e5e7eb;
+        --primary: #2cb5aa;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Noto Sans CJK SC", "Microsoft Yahei", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 24px 16px 32px;
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 26px;
+      }
+      .sub {
+        color: var(--muted);
+        margin-bottom: 18px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px;
+        box-shadow: 0 2px 8px rgba(17, 24, 39, 0.03);
+      }
+      .kpi-label {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .kpi-value {
+        margin-top: 8px;
+        font-size: 24px;
+        font-weight: 700;
+      }
+      .section-title {
+        margin: 0 0 10px;
+        font-size: 16px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 12px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      th, td {
+        text-align: left;
+        padding: 9px 8px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      th { color: var(--muted); font-weight: 600; }
+      code {
+        background: #f9fafb;
+        border: 1px solid #eef2f7;
+        border-radius: 6px;
+        padding: 1px 5px;
+      }
+      textarea, input, select {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 11px;
+        font-size: 14px;
+      }
+      button {
+        border: none;
+        border-radius: 10px;
+        background: var(--primary);
+        color: #fff;
+        padding: 9px 14px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      .muted { color: var(--muted); font-size: 12px; }
+      .link-editor {
+        display: grid;
+        gap: 10px;
+      }
+      .link-row {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px;
+        background: #fafcff;
+      }
+      .link-row-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .link-row .full {
+        grid-column: 1 / -1;
+      }
+      .link-row .actions {
+        display: flex;
+        justify-content: flex-end;
+      }
+      .btn-secondary {
+        background: #64748b;
+      }
+      .btn-danger {
+        background: #ef4444;
+      }
+      .tiny {
+        font-size: 12px;
+      }
+      @media (max-width: 1000px) {
+        .row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>小西记账管理面板</h1>
+      <div class="sub">路由：<code>/admin</code> · 支持查看用户量、使用记录、记账参数配置</div>
+
+      <div class="toolbar">
+        <button id="refreshBtn">刷新数据</button>
+        <span class="muted" id="metaLine">加载中...</span>
+      </div>
+
+      <div class="row">
+        <div class="card">
+          <div class="kpi-label">累计用户数（估算）</div>
+          <div class="kpi-value" id="totalUsers">-</div>
+        </div>
+        <div class="card">
+          <div class="kpi-label">24 小时活跃用户</div>
+          <div class="kpi-value" id="activeUsers">-</div>
+        </div>
+        <div class="card">
+          <div class="kpi-label">累计请求量</div>
+          <div class="kpi-value" id="totalRequests">-</div>
+        </div>
+        <div class="card">
+          <div class="kpi-label">24 小时请求量</div>
+          <div class="kpi-value" id="requests24h">-</div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h3 class="section-title">最近使用记录</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>用户标识</th>
+                <th>请求</th>
+                <th>状态</th>
+                <th>耗时</th>
+              </tr>
+            </thead>
+            <tbody id="eventsBody"></tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h3 class="section-title">服务信息</h3>
+          <div class="muted" id="serviceInfo">-</div>
+          <h3 class="section-title" style="margin-top: 14px;">Top 路由（24h）</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>路由</th>
+                <th>请求数</th>
+              </tr>
+            </thead>
+            <tbody id="topRoutesBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="grid" style="margin-top: 12px;">
+        <div class="card">
+          <h3 class="section-title">记账参数（当前下发配置）</h3>
+          <textarea id="configJson" rows="16" readonly></textarea>
+        </div>
+        <div class="card">
+          <h3 class="section-title">隐私政策 URL</h3>
+          <input id="privacyInput" type="url" placeholder="https://xx.cloudmantoua.top/privacy" />
+          <div style="margin-top: 10px; display: flex; gap: 8px;">
+            <button id="savePrivacyBtn">保存 URL</button>
+          </div>
+          <div class="muted" id="privacySaveMsg" style="margin-top: 8px;"></div>
+
+          <h3 class="section-title" style="margin-top: 16px;">我的页外链（可控显示）</h3>
+          <div class="muted" style="margin-bottom: 8px;">
+            支持抖音 / 小红书 / 公众号 / 哔哩哔哩 / 任意第三方网页。可配置名称、平台、链接与启用状态。
+          </div>
+          <div id="linksEditor" class="link-editor"></div>
+          <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
+            <button id="addLinkRowBtn" class="btn-secondary">新增一条</button>
+            <button id="saveLinksBtn">保存链接配置</button>
+          </div>
+          <div class="muted" id="linksSaveMsg" style="margin-top: 8px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const token = new URLSearchParams(location.search).get('token') || '';
+      const q = (selector) => document.querySelector(selector);
+      const withToken = (url) => {
+        if (!token) return url;
+        const joiner = url.includes('?') ? '&' : '?';
+        return `${url}${joiner}token=${encodeURIComponent(token)}`;
+      };
+      let editableProfileLinks = [];
+
+      function createEmptyLink() {
+        return {
+          id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name: '',
+          platform: 'custom',
+          url: '',
+          enabled: true,
+          symbolName: '',
+          openInExternalBrowser: true
+        };
+      }
+
+      function safe(value, fallback = '-') {
+        return value ?? fallback;
+      }
+
+      function escapeHTML(value) {
+        return String(value ?? '')
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#39;');
+      }
+
+      async function fetchSummary() {
+        const response = await fetch(withToken('/admin/api/summary'));
+        if (!response.ok) {
+          throw new Error(`加载失败：HTTP ${response.status}`);
+        }
+        const payload = await response.json();
+        return payload.data;
+      }
+
+      function renderSummary(data) {
+        q('#metaLine').textContent = `最近更新：${new Date(data.generatedAt).toLocaleString()}`;
+        q('#totalUsers').textContent = String(data.users.total);
+        q('#activeUsers').textContent = String(data.users.active24h);
+        q('#totalRequests').textContent = String(data.traffic.totalRequests);
+        q('#requests24h').textContent = String(data.traffic.requests24h);
+
+        q('#serviceInfo').textContent =
+          `域名：${safe(data.domain)}\n端口：${safe(data.backendPort)}\n配置版本：${safe(data.configVersion)}\n最新规则版本：${safe(data.latestRuleRelease?.configVersion)}`;
+
+        const eventsBody = q('#eventsBody');
+        eventsBody.innerHTML = '';
+        (data.recentEvents || []).slice(0, 60).forEach((event) => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${new Date(event.time).toLocaleString()}</td>
+            <td><code>${safe(event.installId || event.userKey)}</code></td>
+            <td>${safe(event.method)} ${safe(event.path)}</td>
+            <td>${safe(event.statusCode)}</td>
+            <td>${safe(event.durationMs, 0)}ms</td>
+          `;
+          eventsBody.appendChild(row);
+        });
+
+        const topRoutesBody = q('#topRoutesBody');
+        topRoutesBody.innerHTML = '';
+        (data.traffic.topRoutes || []).forEach((item) => {
+          const row = document.createElement('tr');
+          row.innerHTML = `<td>${item.route}</td><td>${item.count}</td>`;
+          topRoutesBody.appendChild(row);
+        });
+
+        const prettyConfig = JSON.stringify(data.bookkeepingParams || {}, null, 2);
+        q('#configJson').value = prettyConfig;
+
+        const privacyURL =
+          data.bookkeepingParams?.appSettings?.privacyPolicyURL ||
+          'https://xx.cloudmantoua.top/privacy';
+        q('#privacyInput').value = privacyURL;
+
+        editableProfileLinks = Array.isArray(data.bookkeepingParams?.appSettings?.profileLinks)
+          ? data.bookkeepingParams.appSettings.profileLinks
+          : [];
+        renderLinkEditor();
+      }
+
+      function renderLinkEditor() {
+        const container = q('#linksEditor');
+        container.innerHTML = '';
+
+        if (!editableProfileLinks.length) {
+          const emptyTip = document.createElement('div');
+          emptyTip.className = 'muted';
+          emptyTip.textContent = '暂未配置，点击“新增一条”开始。';
+          container.appendChild(emptyTip);
+          return;
+        }
+
+        editableProfileLinks.forEach((item, index) => {
+          const row = document.createElement('div');
+          row.className = 'link-row';
+          row.dataset.linkRow = String(index);
+          const name = escapeHTML(item.name || '');
+          const platform = escapeHTML(item.platform || 'custom');
+          const url = escapeHTML(item.url || '');
+          const symbolName = escapeHTML(item.symbolName || '');
+          row.innerHTML = `
+            <div class="link-row-grid">
+              <div>
+                <div class="muted tiny">名称</div>
+                <input type="text" data-field="name" value="${name}" placeholder="例如：抖音主页" />
+              </div>
+              <div>
+                <div class="muted tiny">平台</div>
+                <input type="text" data-field="platform" value="${platform}" placeholder="douyin / xiaohongshu / wechat / bilibili / custom" />
+              </div>
+              <div class="full">
+                <div class="muted tiny">链接 URL</div>
+                <input type="url" data-field="url" value="${url}" placeholder="https://..." />
+              </div>
+              <div>
+                <div class="muted tiny">图标 Symbol（可选）</div>
+                <input type="text" data-field="symbolName" value="${symbolName}" placeholder="例如：play.rectangle.fill" />
+              </div>
+              <div>
+                <div class="muted tiny">启用状态</div>
+                <select data-field="enabled">
+                  <option value="true" ${item.enabled === false ? '' : 'selected'}>启用</option>
+                  <option value="false" ${item.enabled === false ? 'selected' : ''}>隐藏</option>
+                </select>
+              </div>
+              <div class="actions full">
+                <button type="button" class="btn-danger" data-action="remove">删除</button>
+              </div>
+            </div>
+          `;
+          container.appendChild(row);
+        });
+      }
+
+      function readLinkEditor() {
+        const rows = [...document.querySelectorAll('[data-link-row]')];
+        return rows
+          .map((row, index) => {
+            const getValue = (field) => row.querySelector(`[data-field="${field}"]`)?.value?.trim() || '';
+            const name = getValue('name');
+            const platform = getValue('platform') || 'custom';
+            const url = getValue('url');
+            const symbolName = getValue('symbolName');
+            const enabled = getValue('enabled') !== 'false';
+
+            if (!name || !url) {
+              return null;
+            }
+
+            try {
+              // Validate URL format
+              // eslint-disable-next-line no-new
+              new URL(url);
+            } catch (_) {
+              return null;
+            }
+
+            return {
+              id: editableProfileLinks[index]?.id || `link-${index + 1}`,
+              name,
+              platform,
+              url,
+              enabled,
+              symbolName: symbolName || null,
+              openInExternalBrowser: true
+            };
+          })
+          .filter(Boolean);
+      }
+
+      async function refresh() {
+        try {
+          const data = await fetchSummary();
+          renderSummary(data);
+        } catch (error) {
+          q('#metaLine').textContent = String(error.message || error);
+        }
+      }
+
+      async function savePrivacyURL() {
+        const privacyPolicyURL = q('#privacyInput').value.trim();
+        if (!privacyPolicyURL) {
+          q('#privacySaveMsg').textContent = '请输入隐私政策 URL';
+          return;
+        }
+        q('#privacySaveMsg').textContent = '保存中...';
+        const response = await fetch(withToken('/admin/api/config/privacy-policy'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ privacyPolicyURL })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          q('#privacySaveMsg').textContent = payload.message || `保存失败：HTTP ${response.status}`;
+          return;
+        }
+        q('#privacySaveMsg').textContent = `已保存，配置版本 ${payload.data.version}`;
+        await refresh();
+      }
+
+      async function saveProfileLinks() {
+        q('#linksSaveMsg').textContent = '保存中...';
+        const profileLinks = readLinkEditor();
+        const response = await fetch(withToken('/admin/api/config/profile-links'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profileLinks })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          q('#linksSaveMsg').textContent = payload.message || `保存失败：HTTP ${response.status}`;
+          return;
+        }
+        q('#linksSaveMsg').textContent = `已保存 ${profileLinks.length} 条，配置版本 ${payload.data.version}`;
+        await refresh();
+      }
+
+      q('#refreshBtn').addEventListener('click', refresh);
+      q('#savePrivacyBtn').addEventListener('click', savePrivacyURL);
+      q('#addLinkRowBtn').addEventListener('click', () => {
+        editableProfileLinks.push(createEmptyLink());
+        renderLinkEditor();
+      });
+      q('#saveLinksBtn').addEventListener('click', saveProfileLinks);
+      q('#linksEditor').addEventListener('click', (event) => {
+        const action = event.target?.dataset?.action;
+        if (action !== 'remove') return;
+        const row = event.target.closest('[data-link-row]');
+        if (!row) return;
+        const index = Number.parseInt(row.dataset.linkRow || '-1', 10);
+        if (!Number.isFinite(index) || index < 0) return;
+        editableProfileLinks.splice(index, 1);
+        renderLinkEditor();
+      });
+      refresh();
+    </script>
+  </body>
+</html>

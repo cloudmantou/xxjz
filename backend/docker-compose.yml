@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: wuyoushu-rules-postgres
+    restart: unless-stopped
+    ports:
+      - "54329:5432"
+    environment:
+      POSTGRES_DB: wuyoushu_rules
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - wuyoushu_rules_pgdata:/var/lib/postgresql/data
+
+volumes:
+  wuyoushu_rules_pgdata:

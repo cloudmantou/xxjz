@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wuyoushu/rule-patch.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "upsert": {
+      "type": "array",
+      "items": {
+        "$ref": "rule.schema.json"
+      }
+    },
+    "deleteRuleIds": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "deleteRuleKeys": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ruleId"
+        ],
+        "properties": {
+          "sourceApp": {
+            "type": "string"
+          },
+          "sceneType": {
+            "type": "string"
+          },
+          "ruleNamespace": {
+            "type": "string"
+          },
+          "ruleId": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "tombstones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ruleId"
+        ],
+        "properties": {
+          "sourceApp": {
+            "type": "string"
+          },
+          "sceneType": {
+            "type": "string"
+          },
+          "ruleNamespace": {
+            "type": "string"
+          },
+          "ruleId": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "reason": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "number"
+            ]
+          },
+          "ttlSeconds": {
+            "type": "number",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "priorityAdjustments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ruleId"
+        ],
+        "properties": {
+          "sourceApp": {
+            "type": "string"
+          },
+          "sceneType": {
+            "type": "string"
+          },
+          "ruleNamespace": {
+            "type": "string"
+          },
+          "ruleId": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minMatchValue": {
+            "type": "number",
+            "minimum": 0
+          },
+          "minMatchValueDelta": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "noiseKeywords": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "add": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "remove": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

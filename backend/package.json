@@ -1,0 +1,23 @@
+{
+  "name": "wuyoushu-config-server",
+  "version": "1.0.0",
+  "description": "无忧书规则发布与配置热更新服务",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "db:migrate": "node scripts/db-migrate.js",
+    "db:migrate:status": "node scripts/db-migrate.js --status",
+    "db:seed": "node scripts/db-seed.js",
+    "db:reset": "node scripts/db-reset.js --yes --seed",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "mysql2": "^3.15.3",
+    "pg": "^8.13.1"
+  }
+}

@@ -1,0 +1,200 @@
+"小西记账" = "AssetLife";
+
+"主页" = "Home";
+"记账" = "Bookkeeping";
+"资产" = "Assets";
+"心愿" = "Wishlist";
+"我的" = "Me";
+"记一笔" = "Add Record";
+"今日收支" = "Today's Cashflow";
+"今日" = "Today";
+"流水" = "Records";
+"统计" = "Stats";
+"预算" = "Budget";
+"今日暂无记录" = "No records today";
+"点击右下角按钮开始记账" = "Tap the bottom-right button to start recording";
+"今天" = "Today";
+"昨天" = "Yesterday";
+"完成" = "Done";
+"再记" = "Again";
+"再记一笔" = "Add Another";
+"添加备注" = "Add Note";
+
+"类型" = "Type";
+"日期" = "Date";
+"备注" = "Note";
+"账单详情" = "Record Details";
+"添加备注（可选）" = "Add note (optional)";
+
+"智能记账" = "Smart Bookkeeping";
+"输入描述，自动识别金额和分类" = "Describe it and auto-detect amount/category";
+"例如：午餐35元" = "e.g. Lunch 35";
+"停止录音" = "Stop Recording";
+"语音输入" = "Voice Input";
+"正在聆听..." = "Listening...";
+"识别并填入" = "Parse and Fill";
+"请授权语音识别" = "Please allow speech recognition";
+"识别失败：" = "Recognition failed: ";
+
+"支出" = "Expense";
+"收入" = "Income";
+"自定义" = "Custom";
+"添加分类" = "Add Category";
+"编辑分类" = "Edit Category";
+"取消" = "Cancel";
+"保存" = "Save";
+"预览" = "Preview";
+"分类名称" = "Category Name";
+"例如：宠物、健身、美甲" = "e.g. Pets, Fitness, Nails";
+"选择图标" = "Choose Icon";
+"背景颜色" = "Background Color";
+"常用" = "Common";
+"更多" = "More";
+"细分分类" = "Subcategories";
+"收起细分" = "Hide Subcategories";
+"先选一个分类，再看细分选项" = "Select a category first to view subcategories";
+"本时段常用" = "Frequent in this period";
+"最近 + 高频" = "Recent + Frequent";
+"白天" = "Daytime";
+"晚间" = "Evening";
+"周末" = "Weekend";
+"工作日" = "Weekday";
+
+"记 账 小 票" = "RECORD RECEIPT";
+"合计" = "Total";
+"已记账" = "Recorded";
+"长按可以分享小票哦~" = "Long press to share this receipt";
+"其他" = "Other";
+
+"餐饮" = "Dining";
+"交通" = "Transport";
+"购物" = "Shopping";
+"娱乐" = "Entertainment";
+"居住" = "Housing";
+"医疗" = "Medical";
+"教育" = "Education";
+"人情" = "Social";
+"转账" = "Transfer";
+
+"早餐" = "Breakfast";
+"午餐" = "Lunch";
+"晚餐" = "Dinner";
+"零食" = "Snacks";
+"饮品" = "Drinks";
+"外卖" = "Takeout";
+"夜宵" = "Late Night";
+"聚餐" = "Gathering";
+
+"公交" = "Bus";
+"地铁" = "Metro";
+"出租车" = "Taxi";
+"共享单车" = "Shared Bike";
+"加油" = "Fuel";
+"停车" = "Parking";
+"高铁" = "High-speed Rail";
+"飞机" = "Flight";
+
+"衣服" = "Clothes";
+"鞋子" = "Shoes";
+"包包" = "Bags";
+"日用品" = "Daily Necessities";
+"数码" = "Digital";
+"家居" = "Home";
+
+"电影" = "Movies";
+"游戏" = "Games";
+"音乐" = "Music";
+"运动" = "Sports";
+"旅行" = "Travel";
+
+"房租" = "Rent";
+"水电" = "Utilities";
+"物业" = "Property";
+"网费" = "Internet";
+"维修" = "Maintenance";
+
+"门诊" = "Clinic";
+"药品" = "Medicine";
+"体检" = "Checkup";
+"保健" = "Health";
+"牙科" = "Dental";
+
+"书籍" = "Books";
+"课程" = "Courses";
+"培训" = "Training";
+"考试" = "Exams";
+
+"红包" = "Red Packet";
+"礼物" = "Gift";
+"请客" = "Treat";
+"婚礼" = "Wedding";
+
+"微信" = "WeChat";
+"支付宝" = "Alipay";
+"银行" = "Bank";
+"现金" = "Cash";
+
+"杂费" = "Misc";
+"丢失" = "Lost";
+"罚款" = "Fine";
+
+"工资" = "Salary";
+"兼职" = "Part-time";
+"理财收益" = "Investment Income";
+"退款" = "Refund";
+"其他收入" = "Other Income";
+
+"电子产品" = "Electronics";
+"数码配件" = "Digital Accessories";
+"家居用品" = "Home Supplies";
+"家具" = "Furniture";
+"交通工具" = "Vehicles";
+"珠宝首饰" = "Jewelry";
+"艺术品" = "Art";
+"图书音像" = "Books & Media";
+"运动户外" = "Sports & Outdoors";
+"美妆护肤" = "Beauty & Skincare";
+"食品饮料" = "Food & Beverage";
+"使用中" = "Active";
+"已卖出" = "Sold";
+"已报废" = "Disposed";
+"优先级" = "Priority";
+"名称" = "Name";
+"目标价" = "Target Price";
+"添加时间" = "Created Time";
+"待购买" = "To Buy";
+"已购买" = "Purchased";
+"服饰鞋包" = "Fashion & Bags";
+
+"总览" = "Overview";
+"资产状态" = "Asset Status";
+"资产分类" = "Asset Categories";
+"月度花费趋势" = "Monthly Expense Trend";
+"支出分类" = "Expense Categories";
+"每日支出" = "Daily Expense";
+"月度趋势" = "Monthly Trend";
+"结余" = "Balance";
+"目标总价" = "Total Target";
+"平均目标价" = "Average Target";
+"心愿清单" = "Wishlist";
+"搜索心愿" = "Search wishlist";
+"删除" = "Delete";
+"搜索资产" = "Search assets";
+"总价值" = "Total Value";
+"日均成本" = "Daily Cost";
+"全部" = "All";
+"资产净值" = "Net Asset Value";
+"在用资产" = "Active Assets";
+"附加成本" = "Extra Cost";
+"快捷操作" = "Quick Actions";
+"记资产" = "Add Asset";
+"写心愿" = "Add Wish";
+"最近记账" = "Recent Records";
+"今日消费记录" = "Today's Expense Records";
+"查看全部" = "View All";
+"今日支出" = "Today's Expense";
+"今日结余" = "Today's Balance";
+"# 长按可以分享小票喔~ ✨" = "# Long press to share your receipt ~ ✨";
+"账本 iCloud 同步" = "Bookkeeping iCloud Sync";
+"已开启" = "Enabled";
+"仅本地" = "Local only";
