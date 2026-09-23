@@ -408,8 +408,14 @@ struct ImportView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
-                    if viewModel.duplicateCount > 0 {
-                        Text("跳过重复记录 \(viewModel.duplicateCount) 条")
+                    if viewModel.confirmedDuplicateCount > 0 {
+                        Text("指纹确认重复，已跳过 \(viewModel.confirmedDuplicateCount) 条")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+
+                    if viewModel.suspectedDuplicateSkippedCount > 0 {
+                        Text("按所选策略跳过疑似重复 \(viewModel.suspectedDuplicateSkippedCount) 条")
                             .font(.caption)
                             .foregroundStyle(.orange)
                     }
@@ -512,6 +518,8 @@ final class ImportViewModel: ObservableObject {
     @Published var importSuccess = false
     @Published var importedCount = 0
     @Published var duplicateCount = 0
+    @Published var confirmedDuplicateCount = 0
+    @Published var suspectedDuplicateSkippedCount = 0
     @Published var failedCount = 0
     @Published var invalidDateCount = 0
     @Published var duplicatePreview = ImportDuplicatePreview()
@@ -710,6 +718,8 @@ final class ImportViewModel: ObservableObject {
 
             importedCount = batch.importedCount
             duplicateCount = batch.duplicateCount
+            confirmedDuplicateCount = batch.confirmedDuplicateCount
+            suspectedDuplicateSkippedCount = batch.suspectedDuplicateSkippedCount
             failedCount = batch.failedCount
             importSuccess = true
             step = .result

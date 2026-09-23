@@ -177,6 +177,44 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(rows[1].first, value)
     }
 
+    func test_csvParser_readsUTF8ChineseFileWithoutMojibake() async throws {
+        let csv = "日期,金额,类别\n2026-09-23,35.00,餐饮\n"
+        let url = try makeTemporaryCSVFile(data: Data(csv.utf8))
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let parsed = try await CsvParser().parse(url: url)
+
+        XCTAssertEqual(parsed.columns, ["日期", "金额", "类别"])
+        XCTAssertEqual(parsed.rows, [["2026-09-23", "35.00", "餐饮"]])
+    }
+
+    func test_csvParser_readsUTF8BOMChineseFile() async throws {
+        let csv = "日期,金额,类别\n2026-09-23,35.00,餐饮\n"
+        let data = Data([0xEF, 0xBB, 0xBF]) + Data(csv.utf8)
+        let url = try makeTemporaryCSVFile(data: data)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let parsed = try await CsvParser().parse(url: url)
+
+        XCTAssertEqual(parsed.columns, ["日期", "金额", "类别"])
+        XCTAssertEqual(parsed.rows.first?.last, "餐饮")
+    }
+
+    func test_csvParser_readsGB18030ChineseFile() async throws {
+        let encodedData = Data([
+            0xC8, 0xD5, 0xC6, 0xDA, 0x2C, 0xBD, 0xF0, 0xB6, 0xEE, 0x2C, 0xC0, 0xE0, 0xB1, 0xF0, 0x0A,
+            0x32, 0x30, 0x32, 0x36, 0x2D, 0x30, 0x39, 0x2D, 0x32, 0x33, 0x2C, 0x33, 0x35, 0x2E, 0x30, 0x30,
+            0x2C, 0xB2, 0xCD, 0xD2, 0xFB, 0x0A
+        ])
+        let url = try makeTemporaryCSVFile(data: encodedData)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let parsed = try await CsvParser().parse(url: url)
+
+        XCTAssertEqual(parsed.columns, ["日期", "金额", "类别"])
+        XCTAssertEqual(parsed.rows.first?.last, "餐饮")
+    }
+
     @MainActor
     func test_invalidImportDate_isSkippedAndCounted() {
         let controller = PersistenceController(inMemory: true)
@@ -212,6 +250,26 @@ final class ServiceTests: XCTestCase {
         let secondBatch = try await service.executeImport(records: [record])
         XCTAssertEqual(secondBatch.importedCount, 0)
         XCTAssertEqual(secondBatch.duplicateCount, 1)
+        XCTAssertEqual(secondBatch.confirmedDuplicateCount, 1)
+        XCTAssertEqual(secondBatch.suspectedDuplicateSkippedCount, 0)
+    }
+
+    @MainActor
+    func test_backgroundImport_afterSave_viewContextImmediatelySeesInsertedRows() async throws {
+        let controller = PersistenceController(inMemory: true)
+        let context = controller.container.viewContext
+        let service = ImportExportService(context: context)
+        let record = makeImportBillRecord()
+
+        let batch = try await service.executeImport(records: [record])
+
+        let request = BookkeepingTransaction.fetchRequest()
+        request.predicate = NSPredicate(format: "billSource == %@", "import:\(batch.id.uuidString)")
+        let visibleTransactions = try context.fetch(request)
+        XCTAssertEqual(visibleTransactions.count, 1)
+        XCTAssertFalse(visibleTransactions[0].objectID.isTemporaryID)
+        XCTAssertEqual(batch.confirmedDuplicateCount, 0)
+        XCTAssertEqual(batch.suspectedDuplicateSkippedCount, 0)
     }
 
     @MainActor
@@ -242,6 +300,7 @@ final class ServiceTests: XCTestCase {
         )
         XCTAssertEqual(batch.importedCount, 1)
         XCTAssertEqual(batch.duplicateCount, 0)
+        XCTAssertEqual(batch.suspectedDuplicateSkippedCount, 0)
     }
 
     @MainActor
@@ -267,6 +326,8 @@ final class ServiceTests: XCTestCase {
         let skipBatch = try await skipService.executeImport(records: records)
         XCTAssertEqual(skipBatch.importedCount, 1)
         XCTAssertEqual(skipBatch.duplicateCount, 1)
+        XCTAssertEqual(skipBatch.confirmedDuplicateCount, 0)
+        XCTAssertEqual(skipBatch.suspectedDuplicateSkippedCount, 1)
     }
 
     @MainActor
@@ -302,6 +363,13 @@ final class ServiceTests: XCTestCase {
         )
         record.matchedCategoryKey = "dining"
         return record
+    }
+
+    private func makeTemporaryCSVFile(data: Data) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("csv-test-\(UUID().uuidString).csv")
+        try data.write(to: url, options: .atomic)
+        return url
     }
 
     func test_rulePatchMerge_upsertDeleteAndPriorityAdjustment() {

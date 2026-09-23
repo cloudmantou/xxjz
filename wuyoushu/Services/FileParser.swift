@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 
 // MARK: - File Parser Protocol
 
@@ -16,37 +17,29 @@ enum CSVCodec {
 
 final class CsvParser: FileParser {
     func parse(url: URL) async throws -> (columns: [String], rows: [[String]]) {
-        // Read file data first
         let fileData = try Data(contentsOf: url)
 
-        // Try multiple encodings commonly used for Chinese text
-        var content: String?
+        let utf8BOM = Data([0xEF, 0xBB, 0xBF])
+        let hasUTF8BOM = fileData.starts(with: utf8BOM)
+        let dataWithoutBOM = hasUTF8BOM ? Data(fileData.dropFirst(utf8BOM.count)) : fileData
+        var content = String(data: dataWithoutBOM, encoding: .utf8)
 
-        // Use NSString for better encoding support on iOS
-        // NSString can handle more encodings than String.Encoding directly
-        let gb18030Encoding = CFStringConvertIANACharSetNameToEncoding("GB18030" as CFString)
-        if gb18030Encoding != kCFStringEncodingInvalidId {
-            if let nsString = NSString(data: fileData, encoding: UInt(gb18030Encoding)) {
-                let str = nsString as String
-                if !str.contains("\u{FFFD}") {
-                    content = str
+        if content == nil && !hasUTF8BOM {
+            let gb18030CFEncoding = CFStringConvertIANACharSetNameToEncoding("GB18030" as CFString)
+            let gb18030NSStringEncoding = CFStringConvertEncodingToNSStringEncoding(gb18030CFEncoding)
+            if gb18030CFEncoding != kCFStringEncodingInvalidId,
+               gb18030NSStringEncoding != kCFStringEncodingInvalidId,
+               let nsString = NSString(data: fileData, encoding: gb18030NSStringEncoding) {
+                let decoded = nsString as String
+                if !decoded.contains("\u{FFFD}") {
+                    content = decoded
                 }
             }
-        }
 
-        // Fallback: try UTF-8
-        if content == nil {
-            if let str = String(data: fileData, encoding: .utf8) {
-                content = str
-            }
-        }
-
-        // Fallback: try Windows-1252 / Latin-1
-        if content == nil {
-            if let str = String(data: fileData, encoding: .windowsCP1252) {
-                if !str.contains("\u{FFFD}") {
-                    content = str
-                }
+            if content == nil,
+               let decoded = String(data: fileData, encoding: .windowsCP1252),
+               !decoded.contains("\u{FFFD}") {
+                content = decoded
             }
         }
 

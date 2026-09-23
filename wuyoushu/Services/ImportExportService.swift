@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 // MARK: - Import Models
 
 /// 从 CSV 解析出的单条账单记录
-struct ImportBillRecord: Identifiable {
+struct ImportBillRecord: Identifiable, Sendable {
     let id = UUID()
     var date: Date
     var amount: Double
@@ -44,10 +44,13 @@ struct ImportBatch {
     let importedAt: Date
     let recordCount: Int
     let importedCount: Int
-    let duplicateCount: Int
+    let confirmedDuplicateCount: Int
+    let suspectedDuplicateSkippedCount: Int
     let failedCount: Int
     let invalidDateCount: Int
     let autoCreatedCategoryCount: Int  // 自动创建的新分类数量
+
+    var duplicateCount: Int { confirmedDuplicateCount + suspectedDuplicateSkippedCount }
 }
 
 struct ImportDuplicatePreview: Equatable {
@@ -55,6 +58,14 @@ struct ImportDuplicatePreview: Equatable {
     var suspectedCount = 0
 
     var totalCount: Int { confirmedCount + suspectedCount }
+}
+
+private struct ImportExecutionResult: Sendable {
+    let importedCount: Int
+    let confirmedDuplicateCount: Int
+    let suspectedDuplicateSkippedCount: Int
+    let failedCount: Int
+    let insertedObjectIDURIs: [URL]
 }
 
 private struct ImportDeduplicationKey: Hashable, Sendable {
@@ -335,15 +346,15 @@ final class ImportExportService: ObservableObject {
     }
 
     func duplicateCountPreview(records: [ImportBillRecord]) throws -> ImportDuplicatePreview {
-        var existingTransactions: [BookkeepingTransaction] = []
-        try viewContext.performAndWait {
-            existingTransactions = try viewContext.fetch(BookkeepingTransaction.fetchRequest())
+        let (confirmedFingerprints, legacyKeys) = try viewContext.performAndWait {
+            let existingTransactions = try viewContext.fetch(BookkeepingTransaction.fetchRequest())
+            let confirmedFingerprints = Set(existingTransactions.compactMap(\.importFingerprint))
+            let legacyKeys = Set(existingTransactions.compactMap { transaction in
+                transaction.importFingerprint == nil ? Self.transactionKey(for: transaction) : nil
+            })
+            return (confirmedFingerprints, legacyKeys)
         }
 
-        let confirmedFingerprints = Set(existingTransactions.compactMap(\.importFingerprint))
-        let legacyKeys = Set(existingTransactions.compactMap { transaction in
-            transaction.importFingerprint == nil ? Self.transactionKey(for: transaction) : nil
-        })
         var seenInFile = Set<String>()
         var preview = ImportDuplicatePreview()
 
@@ -380,21 +391,22 @@ final class ImportExportService: ObservableObject {
         isImportInProgress = true
         defer { isImportInProgress = false }
 
-        var importedCount = 0
-        var duplicateCount = 0
-        var failedCount = 0
-
         guard let coordinator = viewContext.persistentStoreCoordinator else {
             throw ImportError.persistenceUnavailable
         }
         let importContext = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
         importContext.persistentStoreCoordinator = coordinator
         importContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
-        var importedObjectIDs: [NSManagedObjectID] = []
         let fundAccountKeys = Dictionary(uniqueKeysWithValues: records.map { ($0.id, matchFundAccount($0.fundAccountName)) })
 
+        let result: ImportExecutionResult
         do {
-            try importContext.performAndWait {
+            result = try await importContext.perform {
+                var importedCount = 0
+                var confirmedDuplicateCount = 0
+                var suspectedDuplicateSkippedCount = 0
+                var failedCount = 0
+
                 let committedTransactions = try importContext.fetch(BookkeepingTransaction.fetchRequest())
                 let confirmedFingerprints = Set(committedTransactions.compactMap(\.importFingerprint))
                 let legacyKeys = Set(committedTransactions.compactMap { transaction in
@@ -412,18 +424,18 @@ final class ImportExportService: ObservableObject {
                     let key = Self.transactionKey(for: record, categoryKey: categoryKey, fundAccountKey: fundAccountKey)
                     let fingerprint = key.fingerprint
                     if confirmedFingerprints.contains(fingerprint) {
-                        duplicateCount += 1
+                        confirmedDuplicateCount += 1
                         continue
                     }
 
                     let repeatedInFile = !seenInFile.insert(fingerprint).inserted
                     let isSuspectedDuplicate = legacyKeys.contains(key) || repeatedInFile
                     if isSuspectedDuplicate && skipSuspectedDuplicates {
-                        duplicateCount += 1
+                        suspectedDuplicateSkippedCount += 1
                         continue
                     }
 
-                    let tx = BookkeepingTransaction(
+                    _ = BookkeepingTransaction(
                         context: importContext,
                         amount: record.amount,
                         categoryKey: categoryKey,
@@ -437,20 +449,34 @@ final class ImportExportService: ObservableObject {
                         merchantName: record.merchantName,
                         importFingerprint: fingerprint
                     )
-                    importedObjectIDs.append(tx.objectID)
                     importedCount += 1
                 }
 
+                var insertedObjectIDURIs: [URL] = []
                 if importContext.hasChanges {
+                    let insertedObjects = Array(importContext.insertedObjects)
+                    try importContext.obtainPermanentIDs(for: insertedObjects)
                     try importContext.save()
+                    insertedObjectIDURIs = insertedObjects.map { $0.objectID.uriRepresentation() }
                 }
+
+                return ImportExecutionResult(
+                    importedCount: importedCount,
+                    confirmedDuplicateCount: confirmedDuplicateCount,
+                    suspectedDuplicateSkippedCount: suspectedDuplicateSkippedCount,
+                    failedCount: failedCount,
+                    insertedObjectIDURIs: insertedObjectIDURIs
+                )
             }
         } catch {
-            importContext.performAndWait { importContext.rollback() }
+            await importContext.perform { importContext.rollback() }
             throw error
         }
 
-        if !importedObjectIDs.isEmpty {
+        if !result.insertedObjectIDURIs.isEmpty {
+            let importedObjectIDs = result.insertedObjectIDURIs.compactMap {
+                coordinator.managedObjectID(forURIRepresentation: $0)
+            }
             NSManagedObjectContext.mergeChanges(
                 fromRemoteContextSave: [NSInsertedObjectsKey: importedObjectIDs],
                 into: [viewContext]
@@ -462,9 +488,10 @@ final class ImportExportService: ObservableObject {
             fileName: "import_\(Date().formatted(as: "yyyyMMdd_HHmmss"))",
             importedAt: Date(),
             recordCount: records.count,
-            importedCount: importedCount,
-            duplicateCount: duplicateCount,
-            failedCount: failedCount,
+            importedCount: result.importedCount,
+            confirmedDuplicateCount: result.confirmedDuplicateCount,
+            suspectedDuplicateSkippedCount: result.suspectedDuplicateSkippedCount,
+            failedCount: result.failedCount,
             invalidDateCount: invalidDateCount,
             autoCreatedCategoryCount: 0  // 由 ViewModel 单独跟踪
         )
