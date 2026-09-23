@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 
 // MARK: - Import Models
 
-/// 从xlsx/csv解析出的单条账单记录
+/// 从 CSV 解析出的单条账单记录
 struct ImportBillRecord: Identifiable {
     let id = UUID()
     var date: Date
@@ -48,6 +48,13 @@ struct ImportBatch {
     let failedCount: Int
     let invalidDateCount: Int
     let autoCreatedCategoryCount: Int  // 自动创建的新分类数量
+}
+
+struct ImportDuplicatePreview: Equatable {
+    var confirmedCount = 0
+    var suspectedCount = 0
+
+    var totalCount: Int { confirmedCount + suspectedCount }
 }
 
 private struct ImportDeduplicationKey: Hashable, Sendable {
@@ -103,6 +110,7 @@ final class ImportExportService: ObservableObject {
     static let shared = ImportExportService()
 
     private let viewContext: NSManagedObjectContext
+    private var isImportInProgress = false
     private(set) var invalidDateRowCount = 0
     private lazy var dateFormatters: [DateFormatter] = {
         let formats = [
@@ -140,7 +148,7 @@ final class ImportExportService: ObservableObject {
 
     // MARK: - File Parsing
 
-    /// 解析文件（xlsx/xls/csv）返回行数据
+    /// 解析 CSV 文件并返回表头与数据行
     func parseFile(at url: URL) async throws -> ImportFileModel {
         let fileName = url.lastPathComponent
         guard url.pathExtension.lowercased() == "csv" else {
@@ -326,16 +334,19 @@ final class ImportExportService: ObservableObject {
             .sorted { $0.occurrenceCount > $1.occurrenceCount }
     }
 
-    func duplicateCountPreview(records: [ImportBillRecord]) throws -> Int {
-        var seenFingerprints = Set<String>()
+    func duplicateCountPreview(records: [ImportBillRecord]) throws -> ImportDuplicatePreview {
+        var existingTransactions: [BookkeepingTransaction] = []
         try viewContext.performAndWait {
-            let existingTransactions = try viewContext.fetch(BookkeepingTransaction.fetchRequest())
-            seenFingerprints = Set(existingTransactions.map { transaction in
-                transaction.importFingerprint ?? Self.transactionKey(for: transaction).fingerprint
-            })
+            existingTransactions = try viewContext.fetch(BookkeepingTransaction.fetchRequest())
         }
 
-        var duplicateCount = 0
+        let confirmedFingerprints = Set(existingTransactions.compactMap(\.importFingerprint))
+        let legacyKeys = Set(existingTransactions.compactMap { transaction in
+            transaction.importFingerprint == nil ? Self.transactionKey(for: transaction) : nil
+        })
+        var seenInFile = Set<String>()
+        var preview = ImportDuplicatePreview()
+
         for record in records {
             let categoryKey = record.matchedCategoryKey ?? "pending:\(normalizedCategoryName(record.categoryName))"
             guard categoryKey != "pending:" else { continue }
@@ -344,30 +355,34 @@ final class ImportExportService: ObservableObject {
                 categoryKey: categoryKey,
                 fundAccountKey: matchFundAccount(record.fundAccountName)
             )
-            if !seenFingerprints.insert(key.fingerprint).inserted {
-                duplicateCount += 1
+            let fingerprint = key.fingerprint
+            if confirmedFingerprints.contains(fingerprint) {
+                preview.confirmedCount += 1
+                continue
+            }
+
+            let repeatedInFile = !seenInFile.insert(fingerprint).inserted
+            if legacyKeys.contains(key) || repeatedInFile {
+                preview.suspectedCount += 1
             }
         }
-        return duplicateCount
+        return preview
     }
 
     /// 执行导入（批量插入 CoreData）
     func executeImport(
         records: [ImportBillRecord],
         invalidDateCount: Int = 0,
-        batchId: UUID = UUID()
+        batchId: UUID = UUID(),
+        skipSuspectedDuplicates: Bool = true
     ) async throws -> ImportBatch {
+        guard !isImportInProgress else { throw ImportError.importInProgress }
+        isImportInProgress = true
+        defer { isImportInProgress = false }
+
         var importedCount = 0
         var duplicateCount = 0
         var failedCount = 0
-
-        var seenFingerprints = Set<String>()
-        try viewContext.performAndWait {
-            let existingTransactions = try viewContext.fetch(BookkeepingTransaction.fetchRequest())
-            seenFingerprints = Set(existingTransactions.map { transaction in
-                transaction.importFingerprint ?? Self.transactionKey(for: transaction).fingerprint
-            })
-        }
 
         guard let coordinator = viewContext.persistentStoreCoordinator else {
             throw ImportError.persistenceUnavailable
@@ -381,9 +396,11 @@ final class ImportExportService: ObservableObject {
         do {
             try importContext.performAndWait {
                 let committedTransactions = try importContext.fetch(BookkeepingTransaction.fetchRequest())
-                seenFingerprints.formUnion(committedTransactions.map { transaction in
-                    transaction.importFingerprint ?? Self.transactionKey(for: transaction).fingerprint
+                let confirmedFingerprints = Set(committedTransactions.compactMap(\.importFingerprint))
+                let legacyKeys = Set(committedTransactions.compactMap { transaction in
+                    transaction.importFingerprint == nil ? Self.transactionKey(for: transaction) : nil
                 })
+                var seenInFile = Set<String>()
 
                 for record in records {
                     guard let categoryKey = record.matchedCategoryKey else {
@@ -394,7 +411,14 @@ final class ImportExportService: ObservableObject {
                     let fundAccountKey = fundAccountKeys[record.id] ?? nil
                     let key = Self.transactionKey(for: record, categoryKey: categoryKey, fundAccountKey: fundAccountKey)
                     let fingerprint = key.fingerprint
-                    guard seenFingerprints.insert(fingerprint).inserted else {
+                    if confirmedFingerprints.contains(fingerprint) {
+                        duplicateCount += 1
+                        continue
+                    }
+
+                    let repeatedInFile = !seenInFile.insert(fingerprint).inserted
+                    let isSuspectedDuplicate = legacyKeys.contains(key) || repeatedInFile
+                    if isSuspectedDuplicate && skipSuspectedDuplicates {
                         duplicateCount += 1
                         continue
                     }
@@ -658,6 +682,7 @@ enum ImportError: LocalizedError {
     case emptyFile
     case invalidFormat
     case persistenceUnavailable
+    case importInProgress
     case parseError(String)
 
     var errorDescription: String? {
@@ -665,6 +690,7 @@ enum ImportError: LocalizedError {
         case .emptyFile: return "文件为空"
         case .invalidFormat: return "不支持的文件格式"
         case .persistenceUnavailable: return "本地数据库当前不可用，账单没有导入。"
+        case .importInProgress: return "已有账单导入正在进行，请稍后重试。"
         case .parseError(let msg): return "解析错误: \(msg)"
         }
     }

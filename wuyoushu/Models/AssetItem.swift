@@ -7,6 +7,10 @@ enum AssetStatus: String, Codable, CaseIterable {
     case disposed = "已报废"
     case deleted = "已删除"
 
+    static var normalRecordsPredicate: NSPredicate {
+        NSPredicate(format: "statusRaw != %@", deleted.rawValue)
+    }
+
     var localizedTitle: String {
         L10n.tr(rawValue)
     }

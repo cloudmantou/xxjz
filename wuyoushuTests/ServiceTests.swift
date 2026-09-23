@@ -2,6 +2,7 @@ import XCTest
 import UIKit
 import AppIntents
 import UniformTypeIdentifiers
+import CoreData
 @testable import AssetLife
 
 final class ServiceTests: XCTestCase {
@@ -110,6 +111,197 @@ final class ServiceTests: XCTestCase {
         XCTAssertFalse(activeRuleIds.contains(9902))
         XCTAssertFalse(service.packageStatus.activeRulesChecksum.isEmpty)
         XCTAssertTrue(service.packageStatus.isRollingBack)
+    }
+
+    @MainActor
+    func test_deleteLocalRule_onlyDeletesRequestedRule() {
+        let service = RuleUpdateService.shared
+        let firstID = Int.random(in: 10_000_000...20_000_000)
+        let deletedID = firstID + 1
+        let thirdID = firstID + 2
+        defer {
+            _ = service.deleteLocalRule(ruleId: firstID)
+            _ = service.deleteLocalRule(ruleId: deletedID)
+            _ = service.deleteLocalRule(ruleId: thirdID)
+        }
+
+        XCTAssertTrue(service.insertLocalRule(makeRule(ruleId: firstID, keyword: "本地规则A", ruleKind: .local)))
+        XCTAssertTrue(service.insertLocalRule(makeRule(ruleId: deletedID, keyword: "本地规则B", ruleKind: .local)))
+        XCTAssertTrue(service.insertLocalRule(makeRule(ruleId: thirdID, keyword: "本地规则C", ruleKind: .local)))
+
+        XCTAssertTrue(service.deleteLocalRule(ruleId: deletedID))
+
+        let remainingIDs = Set(KeywordRulesTable.shared.fetchAllRules().map(\.ruleId))
+        XCTAssertTrue(remainingIDs.contains(firstID))
+        XCTAssertFalse(remainingIDs.contains(deletedID))
+        XCTAssertTrue(remainingIDs.contains(thirdID))
+    }
+
+    @MainActor
+    func test_assetExportAndCount_excludeSoftDeletedAssets() throws {
+        let controller = PersistenceController(inMemory: true)
+        let context = controller.container.viewContext
+        _ = AssetItem(context: context, name: "正常资产", category: "电子产品", purchasePrice: 100)
+        _ = AssetItem(
+            context: context,
+            name: "回收站资产",
+            category: "电子产品",
+            purchasePrice: 200,
+            status: .deleted
+        )
+        try context.save()
+
+        let normalListRequest: NSFetchRequest<AssetItem> = AssetItem.fetchRequest()
+        normalListRequest.predicate = AssetStatus.normalRecordsPredicate
+        let normalListAssets = try context.fetch(normalListRequest)
+        XCTAssertEqual(normalListAssets.map(\.name), ["正常资产"])
+
+        let service = AssetImportExportService(context: context)
+        XCTAssertEqual(service.assetCount, 1)
+
+        let exportURL = try XCTUnwrap(service.exportAllAssetsCSV())
+        defer { try? FileManager.default.removeItem(at: exportURL) }
+        let csv = try String(contentsOf: exportURL, encoding: .utf8)
+        XCTAssertTrue(csv.contains("正常资产"))
+        XCTAssertFalse(csv.contains("回收站资产"))
+        XCTAssertFalse(csv.contains(AssetStatus.deleted.rawValue))
+    }
+
+    func test_csvCodec_roundTripsEscapedQuotesAndMultilineFields() throws {
+        let value = "今天买了\"咖啡\", 备注如下\n第二行"
+        let csv = "备注\n\(CSVCodec.escapeField(value))\n"
+
+        let rows = try CsvParser.parseCSVText(csv)
+
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertEqual(rows[1].first, value)
+    }
+
+    @MainActor
+    func test_invalidImportDate_isSkippedAndCounted() {
+        let controller = PersistenceController(inMemory: true)
+        let service = ImportExportService(context: controller.container.viewContext)
+        let mapping = ColumnMapping(dateColumn: 0, amountColumn: 1, categoryColumn: 2)
+
+        let records = service.convertToBillRecords(
+            rows: [
+                ["2024-06-12", "10.00", "餐饮"],
+                ["这不是日期", "20.00", "餐饮"]
+            ],
+            columnMapping: mapping
+        )
+
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(service.invalidDateRowCount, 1)
+        XCTAssertEqual(Calendar.current.component(.year, from: records[0].date), 2024)
+    }
+
+    @MainActor
+    func test_importedFingerprint_isConfirmedAndSkipped() async throws {
+        let controller = PersistenceController(inMemory: true)
+        let service = ImportExportService(context: controller.container.viewContext)
+        let record = makeImportBillRecord()
+
+        let firstBatch = try await service.executeImport(records: [record])
+        XCTAssertEqual(firstBatch.importedCount, 1)
+
+        let preview = try service.duplicateCountPreview(records: [record])
+        XCTAssertEqual(preview.confirmedCount, 1)
+        XCTAssertEqual(preview.suspectedCount, 0)
+
+        let secondBatch = try await service.executeImport(records: [record])
+        XCTAssertEqual(secondBatch.importedCount, 0)
+        XCTAssertEqual(secondBatch.duplicateCount, 1)
+    }
+
+    @MainActor
+    func test_legacySimilarTransaction_isOnlySuspectedAndCanBeImported() async throws {
+        let controller = PersistenceController(inMemory: true)
+        let context = controller.container.viewContext
+        let service = ImportExportService(context: context)
+        let date = Date(timeIntervalSince1970: 1_750_000_000)
+        let record = makeImportBillRecord(date: date)
+        _ = BookkeepingTransaction(
+            context: context,
+            amount: record.amount,
+            categoryKey: "dining",
+            note: record.note,
+            date: date,
+            isIncome: false,
+            merchantName: record.merchantName
+        )
+        try context.save()
+
+        let preview = try service.duplicateCountPreview(records: [record])
+        XCTAssertEqual(preview.confirmedCount, 0)
+        XCTAssertEqual(preview.suspectedCount, 1)
+
+        let batch = try await service.executeImport(
+            records: [record],
+            skipSuspectedDuplicates: false
+        )
+        XCTAssertEqual(batch.importedCount, 1)
+        XCTAssertEqual(batch.duplicateCount, 0)
+    }
+
+    @MainActor
+    func test_identicalRows_followExplicitSuspectedDuplicatePolicy() async throws {
+        let record = makeImportBillRecord(date: Date(timeIntervalSince1970: 1_750_000_000))
+        let records = [record, makeImportBillRecord(date: record.date)]
+
+        let importAllController = PersistenceController(inMemory: true)
+        let importAllService = ImportExportService(context: importAllController.container.viewContext)
+        let preview = try importAllService.duplicateCountPreview(records: records)
+        XCTAssertEqual(preview.confirmedCount, 0)
+        XCTAssertEqual(preview.suspectedCount, 1)
+
+        let importAllBatch = try await importAllService.executeImport(
+            records: records,
+            skipSuspectedDuplicates: false
+        )
+        XCTAssertEqual(importAllBatch.importedCount, 2)
+        XCTAssertEqual(importAllBatch.duplicateCount, 0)
+
+        let skipController = PersistenceController(inMemory: true)
+        let skipService = ImportExportService(context: skipController.container.viewContext)
+        let skipBatch = try await skipService.executeImport(records: records)
+        XCTAssertEqual(skipBatch.importedCount, 1)
+        XCTAssertEqual(skipBatch.duplicateCount, 1)
+    }
+
+    @MainActor
+    func test_saveFailure_rollsBackAssetEdits() throws {
+        enum ExpectedFailure: Error { case save }
+
+        let controller = PersistenceController(inMemory: true)
+        let context = controller.container.viewContext
+        let asset = AssetItem(context: context, name: "原名称", category: "电子产品", purchasePrice: 100)
+        try context.save()
+        asset.name = "未保存的新名称"
+
+        let message = PersistenceSaveCoordinator.save(context) {
+            throw ExpectedFailure.save
+        }
+
+        XCTAssertNotNil(message)
+        XCTAssertEqual(asset.name, "原名称")
+        XCTAssertFalse(context.hasChanges)
+    }
+
+    private func makeImportBillRecord(
+        date: Date = Date(timeIntervalSince1970: 1_750_000_000)
+    ) -> ImportBillRecord {
+        var record = ImportBillRecord(
+            date: date,
+            amount: 35,
+            isIncome: false,
+            categoryName: "餐饮",
+            note: "午饭",
+            merchantName: "小饭馆",
+            importRowIndex: 1
+        )
+        record.matchedCategoryKey = "dining"
+        return record
     }
 
     func test_rulePatchMerge_upsertDeleteAndPriorityAdjustment() {

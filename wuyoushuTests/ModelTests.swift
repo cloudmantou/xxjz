@@ -33,6 +33,20 @@ final class ModelTests: XCTestCase {
         XCTAssertFalse(asset.isFavorite)
     }
 
+    func test_softDeletedAsset_canBeRestored() {
+        let asset = AssetItem(
+            name: "可恢复资产",
+            category: "电子产品",
+            purchasePrice: 1000
+        )
+
+        asset.moveToRecovery()
+        XCTAssertEqual(asset.status, .deleted)
+
+        asset.restoreFromRecovery()
+        XCTAssertEqual(asset.status, .active)
+    }
+
     func test_persistenceModel_includesAssetFavoriteAttribute() throws {
         let model = PersistenceController.preview.container.managedObjectModel
         let assetEntity = try XCTUnwrap(model.entitiesByName["AssetItem"])

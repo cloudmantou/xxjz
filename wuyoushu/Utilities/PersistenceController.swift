@@ -7,8 +7,14 @@ import SwiftUI
 enum PersistenceSaveCoordinator {
     /// Saves a user-initiated Core Data change and rolls it back if the store rejects it.
     static func save(_ context: NSManagedObjectContext) -> String? {
-        do {
+        save(context) {
             try context.save()
+        }
+    }
+
+    static func save(_ context: NSManagedObjectContext, operation: () throws -> Void) -> String? {
+        do {
+            try operation()
             return nil
         } catch {
             context.rollback()

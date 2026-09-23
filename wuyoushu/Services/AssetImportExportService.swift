@@ -38,6 +38,12 @@ final class AssetImportExportService: ObservableObject {
         self.viewContext = context
     }
 
+    var assetCount: Int {
+        let request: NSFetchRequest<AssetItem> = AssetItem.fetchRequest()
+        request.predicate = AssetStatus.normalRecordsPredicate
+        return (try? viewContext.count(for: request)) ?? 0
+    }
+
     // MARK: - CSV Template
 
     static let csvTemplate = """
@@ -215,6 +221,7 @@ AirPods Pro,数码配件,2024-03-10,1899,1500,使用中,第二代
 
     func exportAllAssetsCSV() -> URL? {
         let fetchRequest: NSFetchRequest<AssetItem> = AssetItem.fetchRequest()
+        fetchRequest.predicate = AssetStatus.normalRecordsPredicate
         fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \AssetItem.updatedAt, ascending: false)]
 
         guard let assets = try? viewContext.fetch(fetchRequest), !assets.isEmpty else {
@@ -227,13 +234,13 @@ AirPods Pro,数码配件,2024-03-10,1899,1500,使用中,第二代
         dateFormatter.dateFormat = "yyyy-MM-dd"
 
         for asset in assets {
-            let name = escapeCSV(asset.name)
-            let category = escapeCSV(asset.category)
+            let name = CSVCodec.escapeField(asset.name)
+            let category = CSVCodec.escapeField(asset.category)
             let dateStr = dateFormatter.string(from: asset.purchaseDate)
             let priceStr = String(format: "%.2f", asset.purchasePrice)
             let valueStr = String(format: "%.2f", asset.currentValue)
             let statusStr = asset.status.rawValue
-            let notesStr = escapeCSV(asset.notes ?? "")
+            let notesStr = CSVCodec.escapeField(asset.notes ?? "")
 
             csvContent += "\(name),\(category),\(dateStr),\(priceStr),\(valueStr),\(statusStr),\(notesStr)\n"
         }
@@ -287,12 +294,6 @@ AirPods Pro,数码配件,2024-03-10,1899,1500,使用中,第二代
         return nil
     }
 
-    private func escapeCSV(_ value: String) -> String {
-        if value.contains(",") || value.contains("\"") || value.contains("\n") {
-            return "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
-        }
-        return value
-    }
 }
 
 extension DateFormatter {

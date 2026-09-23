@@ -306,9 +306,23 @@ struct ImportView: View {
                 Text("共 \(viewModel.importableCount) 条有效记录，预计新增 \(viewModel.expectedNewCount) 条")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                Text("疑似重复 \(viewModel.duplicatePreviewCount) 条，导入时会跳过")
+                Text("已导入指纹匹配 \(viewModel.duplicatePreview.confirmedCount) 条，确认重复会自动跳过")
                     .font(.caption)
-                    .foregroundStyle(viewModel.duplicatePreviewCount > 0 ? .orange : .secondary)
+                    .foregroundStyle(viewModel.duplicatePreview.confirmedCount > 0 ? .orange : .secondary)
+                Text("疑似重复 \(viewModel.duplicatePreview.suspectedCount) 条：旧账单字段相似或当前文件内重复")
+                    .font(.caption)
+                    .foregroundStyle(viewModel.duplicatePreview.suspectedCount > 0 ? .orange : .secondary)
+                Toggle(
+                    viewModel.skipSuspectedDuplicates ? "跳过疑似重复" : "仍然导入疑似重复",
+                    isOn: $viewModel.skipSuspectedDuplicates
+                )
+                .font(.subheadline)
+                .disabled(viewModel.duplicatePreview.suspectedCount == 0)
+                Text(viewModel.skipSuspectedDuplicates
+                     ? "已选择跳过疑似重复项。"
+                     : "已选择导入疑似重复项；同一分钟的相同交易也会保留。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
                 if viewModel.invalidDateCount > 0 {
                     Text("另有 \(viewModel.invalidDateCount) 条日期无法识别，确认后会跳过。")
                         .font(.caption)
@@ -500,11 +514,13 @@ final class ImportViewModel: ObservableObject {
     @Published var duplicateCount = 0
     @Published var failedCount = 0
     @Published var invalidDateCount = 0
-    @Published var duplicatePreviewCount = 0
+    @Published var duplicatePreview = ImportDuplicatePreview()
+    @Published var skipSuspectedDuplicates = true
     @Published var autoCreatedCategoryCount = 0  // 自动创建的新分类数量
 
     private let importService = ImportExportService.shared
     private var importRecords: [ImportBillRecord] = []
+    private var isExecutingImport = false
 
     var canProceed: Bool {
         switch step {
@@ -532,7 +548,8 @@ final class ImportViewModel: ObservableObject {
     }
 
     var expectedNewCount: Int {
-        max(0, importableCount - duplicatePreviewCount)
+        let skippedSuspected = skipSuspectedDuplicates ? duplicatePreview.suspectedCount : 0
+        return max(0, importableCount - duplicatePreview.confirmedCount - skippedSuspected)
     }
 
     func handleFileSelected(_ url: URL) {
@@ -591,6 +608,9 @@ final class ImportViewModel: ObservableObject {
     }
 
     func executeImport() async {
+        guard !isExecutingImport else { return }
+        isExecutingImport = true
+        defer { isExecutingImport = false }
         step = .importing
         let originalCategoryIDs = Set(CustomCategoryStore.shared.categories.map(\.id))
         var newlyCreatedCategories: [CustomCategory] = []
@@ -684,7 +704,8 @@ final class ImportViewModel: ObservableObject {
 
             let batch = try await importService.executeImport(
                 records: records,
-                invalidDateCount: invalidDateCount
+                invalidDateCount: invalidDateCount,
+                skipSuspectedDuplicates: skipSuspectedDuplicates
             )
 
             importedCount = batch.importedCount
@@ -798,9 +819,9 @@ final class ImportViewModel: ObservableObject {
             }
         }
         do {
-            duplicatePreviewCount = try importService.duplicateCountPreview(records: previewRecords)
+            duplicatePreview = try importService.duplicateCountPreview(records: previewRecords)
         } catch {
-            duplicatePreviewCount = 0
+            duplicatePreview = ImportDuplicatePreview()
             errorMessage = "读取现有账单失败：\(error.localizedDescription)"
         }
     }

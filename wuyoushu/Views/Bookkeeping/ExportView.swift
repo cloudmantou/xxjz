@@ -277,7 +277,7 @@ final class ExportViewModel: ObservableObject {
                 billSourceStr,
                 createdAtStr
             ]
-            .map { "\"\($0)\"" }
+            .map(CSVCodec.escapeField)
             .joined(separator: ",")
 
             csv += row + "\n"

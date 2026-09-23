@@ -12,7 +12,7 @@ struct AssetListView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \AssetItem.updatedAt, ascending: false)],
-        predicate: NSPredicate(format: "statusRaw != %@", AssetStatus.deleted.rawValue),
+        predicate: AssetStatus.normalRecordsPredicate,
         animation: .default
     )
     private var assets: FetchedResults<AssetItem>
