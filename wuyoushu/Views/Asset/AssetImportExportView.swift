@@ -223,8 +223,7 @@ final class AssetImportExportViewModel: ObservableObject {
     }
 
     var assetCount: Int {
-        let fetchRequest: NSFetchRequest<AssetItem> = AssetItem.fetchRequest()
-        return (try? PersistenceController.shared.container.viewContext.count(for: fetchRequest)) ?? 0
+        service.assetCount
     }
 
     func handleFileSelected(_ url: URL) async {

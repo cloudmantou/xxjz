@@ -6,6 +6,7 @@ struct ProfileView: View {
     @Environment(\.bottomBarInset) private var bottomBarInset: CGFloat
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \AssetItem.updatedAt, ascending: false)],
+        predicate: NSPredicate(format: "statusRaw != %@", AssetStatus.deleted.rawValue),
         animation: .default
     )
     private var assets: FetchedResults<AssetItem>
@@ -318,6 +319,12 @@ struct ProfileView: View {
                 ExportView()
             } label: {
                 settingsRowLabel(icon: "square.and.arrow.up", title: "导出账单")
+            }
+            Divider().padding(.leading, 52)
+            NavigationLink {
+                LocalBackupView()
+            } label: {
+                settingsRowLabel(icon: "externaldrive.fill", title: "完整数据备份")
             }
         }
         .padding(.horizontal, 14)

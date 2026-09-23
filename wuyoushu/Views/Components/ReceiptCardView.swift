@@ -50,13 +50,13 @@ struct ReceiptCardView: View {
 
     private var dayExpenseTotal: Double {
         sortedDayTransactions
-            .filter { !$0.isIncome }
+            .filter(\.contributesToExpense)
             .reduce(0) { $0 + $1.normalizedAmount }
     }
 
     private var dayIncomeTotal: Double {
         sortedDayTransactions
-            .filter { $0.isIncome }
+            .filter(\.contributesToIncome)
             .reduce(0) { $0 + $1.normalizedAmount }
     }
 
@@ -249,7 +249,11 @@ struct ReceiptCardView: View {
 
             Text(signedReceiptAmount(tx))
                 .font(.system(size: 15, weight: .semibold, design: .monospaced))
-                .foregroundStyle(tx.isIncome ? Color.profitGreen : Color.receiptText)
+                .foregroundStyle(
+                    tx.kind == .income
+                        ? Color.profitGreen
+                        : (tx.kind == .transfer ? Color.receiptText.opacity(0.6) : Color.receiptText)
+                )
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -545,7 +549,12 @@ struct ReceiptCardView: View {
     }
 
     private func signedReceiptAmount(_ tx: BookkeepingTransaction) -> String {
-        let prefix = tx.isIncome ? "+" : "-"
+        let prefix: String
+        switch tx.kind {
+        case .income: prefix = "+"
+        case .expense: prefix = "-"
+        case .transfer: prefix = "↔︎"
+        }
         let amount = abs(tx.normalizedAmount)
         return "\(prefix) ¥ \(String(format: "%.2f", amount))"
     }

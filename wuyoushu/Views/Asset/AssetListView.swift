@@ -12,6 +12,7 @@ struct AssetListView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \AssetItem.updatedAt, ascending: false)],
+        predicate: AssetStatus.normalRecordsPredicate,
         animation: .default
     )
     private var assets: FetchedResults<AssetItem>
@@ -19,6 +20,9 @@ struct AssetListView: View {
     @State private var searchText = ""
     @State private var selectedStatus: AssetStatus? = nil
     @State private var showFavoritesOnly = false
+    @State private var assetToArchive: AssetItem?
+    @State private var showingArchiveConfirmation = false
+    @State private var saveErrorMessage: String?
     @Namespace private var filterChipNamespace
 
     private var screenWidth: CGFloat {
@@ -188,7 +192,7 @@ struct AssetListView: View {
                                         }
                                     }
 
-                                    ForEach(AssetStatus.allCases, id: \.self) { status in
+                                    ForEach(AssetStatus.allCases.filter { $0 != .deleted }, id: \.self) { status in
                                         animatedFilterChip(
                                             title: status.localizedTitle,
                                             token: .status(status)
@@ -213,11 +217,13 @@ struct AssetListView: View {
                                     .contextMenu {
                                         favoriteButton(for: asset)
                                         Divider()
-                                        Button(role: .destructive) {
-                                            viewContext.delete(asset)
-                                            try? viewContext.save()
-                                        } label: {
-                                            Label("删除", systemImage: "trash")
+                                        if asset.status == .active {
+                                            Button(role: .destructive) {
+                                                assetToArchive = asset
+                                                showingArchiveConfirmation = true
+                                            } label: {
+                                                Label("移至恢复管理", systemImage: "archivebox")
+                                            }
                                         }
                                     }
                                 }
@@ -262,6 +268,15 @@ struct AssetListView: View {
                     }
                 }
             }
+            .confirmationDialog("移至恢复管理？", isPresented: $showingArchiveConfirmation) {
+                Button("移至恢复管理") {
+                    archiveSelectedAsset()
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("资产及其附加成本和卖出记录会保留，可随时恢复。")
+            }
+            .persistenceSaveErrorAlert($saveErrorMessage)
             .sheet(isPresented: $showingAddSheet) {
                 AssetFormView(mode: .add)
             }
@@ -273,13 +288,23 @@ struct AssetListView: View {
         Button {
             asset.isFavorite.toggle()
             asset.updatedAt = Date()
-            try? viewContext.save()
+            saveErrorMessage = PersistenceSaveCoordinator.save(viewContext)
         } label: {
             Label(
                 asset.isFavorite ? "取消收藏" : "添加收藏",
                 systemImage: asset.isFavorite ? "star.slash" : "star"
             )
         }
+    }
+
+    private func archiveSelectedAsset() {
+        guard let asset = assetToArchive else { return }
+        asset.moveToRecovery()
+        guard let error = PersistenceSaveCoordinator.save(viewContext) else {
+            assetToArchive = nil
+            return
+        }
+        saveErrorMessage = error
     }
 
     private func animatedFilterChip(title: String, token: AssetFilterToken, action: @escaping () -> Void) -> some View {

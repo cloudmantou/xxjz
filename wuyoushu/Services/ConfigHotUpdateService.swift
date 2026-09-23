@@ -147,19 +147,11 @@ final class ConfigHotUpdateService: ObservableObject {
 
     static let shared = ConfigHotUpdateService()
 
-    /// 服务端配置地址（生产环境）
-    private let productionBaseURL = "https://config.yourdomain.com"
-    /// 测试环境
-    private let testBaseURL = "https://config-test.yourdomain.com"
-
-    /// 当前使用的baseURL
-    private var baseURL: String {
-        #if DEBUG
-        return testBaseURL
-        #else
-        return productionBaseURL
-        #endif
-    }
+    private let baseURLConfigKeys = [
+        "CONFIG_HOT_UPDATE_BASE_URL",
+        "ConfigHotUpdateBaseURL",
+        "configHotUpdate.baseURL"
+    ]
 
     /// AES密钥（与服务端一致）
     private let aesKey = "your-16byte-key!!"  // 16字节AES-128密钥
@@ -243,6 +235,13 @@ final class ConfigHotUpdateService: ObservableObject {
 
     /// 异步拉取最新配置
     func fetchLatestConfig(completion: @escaping (Bool) -> Void) {
+        guard let baseURL = configuredBaseURL,
+              let url = URL(string: "\(baseURL)/api/config/get") else {
+            // Remote config is an optional enhancement. An unconfigured client stays local-only.
+            DispatchQueue.main.async { completion(true) }
+            return
+        }
+
         // 节流：5分钟内不重复请求
         if let lastFetch = lastFetchTime,
            Date().timeIntervalSince(lastFetch) < minFetchInterval {
@@ -250,7 +249,6 @@ final class ConfigHotUpdateService: ObservableObject {
             return
         }
 
-        let url = URL(string: "\(baseURL)/api/config/get")!
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 10
@@ -333,6 +331,25 @@ final class ConfigHotUpdateService: ObservableObject {
     private func loadCachedConfig() {
         guard let data = UserDefaults.standard.data(forKey: Self.configCacheKey) else { return }
         cachedConfig = try? JSONDecoder().decode(ServerConfigModel.self, from: data)
+    }
+
+    private var configuredBaseURL: String? {
+        for key in baseURLConfigKeys {
+            let value = ProcessInfo.processInfo.environment[key]
+                ?? UserDefaults.standard.string(forKey: key)
+                ?? (Bundle.main.object(forInfoDictionaryKey: key) as? String)
+            guard let value else { continue }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty,
+                  !trimmed.localizedCaseInsensitiveContains("yourdomain.com"),
+                  let components = URLComponents(string: trimmed),
+                  ["https", "http"].contains(components.scheme?.lowercased() ?? ""),
+                  components.host != nil else {
+                continue
+            }
+            return trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        }
+        return nil
     }
 
     private func saveCachedConfig(_ config: ServerConfigModel) {

@@ -105,80 +105,54 @@ extension ParsedTransactionCandidatePayload {
 @available(iOS 16.0, *)
 struct AssetLifeShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
-        var shortcuts: [AppShortcut] = []
-
-        shortcuts.append(
-            AppShortcut(
-                intent: OpenRecordIntent(),
-                phrases: ["记一笔 用\(.applicationName)"],
-                shortTitle: "记一笔",
-                systemImageName: "plus.circle.fill"
-            )
+        AppShortcut(
+            intent: OpenRecordIntent(),
+            phrases: ["记一笔 用\(.applicationName)"],
+            shortTitle: "记一笔",
+            systemImageName: "plus.circle.fill"
         )
-        shortcuts.append(
-            AppShortcut(
-                intent: RecordFromScreenshotIntent(),
-                phrases: ["用\(.applicationName)截图自动记账"],
-                shortTitle: "自动记账",
-                systemImageName: "photo.on.rectangle.angled"
-            )
+        AppShortcut(
+            intent: RecordFromScreenshotIntent(),
+            phrases: ["用\(.applicationName)截图自动记账"],
+            shortTitle: "自动记账",
+            systemImageName: "photo.on.rectangle.angled"
         )
-
-        shortcuts.append(
-            AppShortcut(
-                intent: OpenHomeIntent(),
-                phrases: ["打开\(.applicationName)"],
-                shortTitle: "打开主页",
-                systemImageName: "house.fill"
-            )
+        AppShortcut(
+            intent: OpenHomeIntent(),
+            phrases: ["打开\(.applicationName)"],
+            shortTitle: "打开主页",
+            systemImageName: "house.fill"
         )
-
-        shortcuts.append(
-            AppShortcut(
-                intent: OpenAssetTabIntent(),
-                phrases: ["打开\(.applicationName)资产"],
-                shortTitle: "资产",
-                systemImageName: "creditcard.fill"
-            )
+        AppShortcut(
+            intent: OpenAssetTabIntent(),
+            phrases: ["打开\(.applicationName)资产"],
+            shortTitle: "资产",
+            systemImageName: "creditcard.fill"
         )
-
-        shortcuts.append(
-            AppShortcut(
-                intent: OpenWishTabIntent(),
-                phrases: ["打开\(.applicationName)心愿"],
-                shortTitle: "心愿",
-                systemImageName: "heart.fill"
-            )
+        AppShortcut(
+            intent: OpenWishTabIntent(),
+            phrases: ["打开\(.applicationName)心愿"],
+            shortTitle: "心愿",
+            systemImageName: "heart.fill"
         )
-
-        shortcuts.append(
-            AppShortcut(
-                intent: OpenProfileIntent(),
-                phrases: ["打开\(.applicationName)我的"],
-                shortTitle: "我的",
-                systemImageName: "person.fill"
-            )
+        AppShortcut(
+            intent: OpenProfileIntent(),
+            phrases: ["打开\(.applicationName)我的"],
+            shortTitle: "我的",
+            systemImageName: "person.fill"
         )
-
-        shortcuts.append(
-            AppShortcut(
-                intent: AddAssetIntent(),
-                phrases: ["用\(.applicationName)记资产"],
-                shortTitle: "记资产",
-                systemImageName: "creditcard.and.123"
-            )
+        AppShortcut(
+            intent: AddAssetIntent(),
+            phrases: ["用\(.applicationName)记资产"],
+            shortTitle: "记资产",
+            systemImageName: "creditcard.and.123"
         )
-
-        shortcuts.append(
-            AppShortcut(
-                intent: AddWishIntent(),
-                phrases: ["用\(.applicationName)记心愿"],
-                shortTitle: "记心愿",
-                systemImageName: "heart.text.square.fill"
-            )
+        AppShortcut(
+            intent: AddWishIntent(),
+            phrases: ["用\(.applicationName)记心愿"],
+            shortTitle: "记心愿",
+            systemImageName: "heart.text.square.fill"
         )
-
-        return shortcuts
     }
 }
 #endif

@@ -5,6 +5,11 @@ enum AssetStatus: String, Codable, CaseIterable {
     case active = "使用中"
     case sold = "已卖出"
     case disposed = "已报废"
+    case deleted = "已删除"
+
+    static var normalRecordsPredicate: NSPredicate {
+        NSPredicate(format: "statusRaw != %@", deleted.rawValue)
+    }
 
     var localizedTitle: String {
         L10n.tr(rawValue)
@@ -15,6 +20,7 @@ enum AssetStatus: String, Codable, CaseIterable {
         case .active: return "green"
         case .sold: return "blue"
         case .disposed: return "gray"
+        case .deleted: return "gray"
         }
     }
 }
@@ -44,6 +50,18 @@ final class AssetItem: NSManagedObject, Identifiable {
     var status: AssetStatus {
         get { AssetStatus(rawValue: statusRaw) ?? .active }
         set { statusRaw = newValue.rawValue }
+    }
+
+    func moveToRecovery() {
+        guard status == .active else { return }
+        status = .deleted
+        updatedAt = Date()
+    }
+
+    func restoreFromRecovery() {
+        guard status == .deleted else { return }
+        status = .active
+        updatedAt = Date()
     }
 
     var extraCosts: [AssetExtraCost] {

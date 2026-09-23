@@ -103,6 +103,9 @@
 		CBFB87D80D85B5D3FEAFAED1 /* receipt_more.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = BC1F819AF5ABD31A84377C4B /* receipt_more.mp3 */; };
 		CDE6C67159EF2C8E0280C891 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E00026EAA965408863DCB81 /* ProfileView.swift */; };
 		D1A2B3C4D5E6F708192A3B4C /* ShortcutTutorialView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3C4D5E6F708192A3B4C /* ShortcutTutorialView.swift */; };
+		1B0F73C1893A4A22B8C3E901 /* LocalBackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0F73C1893A4A22B8C3E901 /* LocalBackupService.swift */; };
+		1B0F73C1893A4A22B8C3E902 /* LocalBackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0F73C1893A4A22B8C3E902 /* LocalBackupView.swift */; };
+		1B0F73C1893A4A22B8C3E903 /* PersistenceRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0F73C1893A4A22B8C3E903 /* PersistenceRecoveryView.swift */; };
 		D48D9A03F07E0D966220A42F /* wuyoushuApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB7E3E989562725FD27454FC /* wuyoushuApp.swift */; };
 		D536AD7A21B3B4EBF330CB93 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF2B2EEDF200C1C86BFEFBA /* ShareViewController.swift */; };
 		D625EAEDF9F616DB7788F2F2 /* TransactionStatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBCCC418BEF7FD56F554AE9E /* TransactionStatsView.swift */; };
@@ -218,6 +221,8 @@
 		49D5A203328ED8E7D6EA5400 /* AssetListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetListView.swift; sourceTree = "<group>"; };
 		4E00026EAA965408863DCB81 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		E1A2B3C4D5E6F708192A3B4C /* ShortcutTutorialView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutTutorialView.swift; sourceTree = "<group>"; };
+		1A0F73C1893A4A22B8C3E902 /* LocalBackupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalBackupView.swift; sourceTree = "<group>"; };
+		1A0F73C1893A4A22B8C3E903 /* PersistenceRecoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceRecoveryView.swift; sourceTree = "<group>"; };
 		54E96300282F5564E6DCBF9C /* KeywordRulesTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeywordRulesTable.swift; sourceTree = "<group>"; };
 		5A5B2B044D70F57F2E25E04E /* StatCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatCard.swift; sourceTree = "<group>"; };
 		5E5C901F213FD839669F16FD /* CalculationServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalculationServiceTests.swift; sourceTree = "<group>"; };
@@ -233,6 +238,7 @@
 		76E4EB66DF8B358A7233F2BC /* ExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportView.swift; sourceTree = "<group>"; };
 		7C79FE4EF9C1BFA3C736A2FA /* DashboardViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardViewModel.swift; sourceTree = "<group>"; };
 		7E0A542EA920C2114E4315EF /* AppShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShortcuts.swift; sourceTree = "<group>"; };
+		1A0F73C1893A4A22B8C3E901 /* LocalBackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalBackupService.swift; sourceTree = "<group>"; };
 		85D7CAC9BCBE7A84531A139A /* AssetItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetItem.swift; sourceTree = "<group>"; };
 		87B4EFB0F0C6263CCFCE0D3F /* BillDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BillDetailView.swift; sourceTree = "<group>"; };
 		887110535A56B0C179AC8EC3 /* AssetExtraCost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetExtraCost.swift; sourceTree = "<group>"; };
@@ -453,6 +459,7 @@
 			isa = PBXGroup;
 			children = (
 				26D6A72350F8E39D0BDE414A /* AIAnalysisService.swift */,
+				1A0F73C1893A4A22B8C3E901 /* LocalBackupService.swift */,
 				F5D1ACDC1550D68676775625 /* AlipayTransactionParser.swift */,
 				7E0A542EA920C2114E4315EF /* AppShortcuts.swift */,
 				269213120FF5D13D2FDC9975 /* AssetImportExportService.swift */,
@@ -515,6 +522,8 @@
 			isa = PBXGroup;
 			children = (
 				4E00026EAA965408863DCB81 /* ProfileView.swift */,
+				1A0F73C1893A4A22B8C3E902 /* LocalBackupView.swift */,
+				1A0F73C1893A4A22B8C3E903 /* PersistenceRecoveryView.swift */,
 				E1A2B3C4D5E6F708192A3B4C /* ShortcutTutorialView.swift */,
 			);
 			path = Profile;
@@ -819,6 +828,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				012BF3BAB0622DBBB8D124DD /* AIAnalysisService.swift in Sources */,
+				1B0F73C1893A4A22B8C3E901 /* LocalBackupService.swift in Sources */,
 				B69D0BCF42229B6753A38360 /* AlipayTransactionParser.swift in Sources */,
 				A0649CD03023643B6556F333 /* AppRouter.swift in Sources */,
 				AFFA0E2B22B5300997A120B8 /* AppShortcuts.swift in Sources */,
@@ -869,6 +879,7 @@
 				C5F84BAA8FB255DD50FE4574 /* FundAccountPickerView.swift in Sources */,
 				762122FEB1E34F351AFFBD17 /* FuzzyTextMatcher.swift in Sources */,
 				2788D951AE766061654771A7 /* ImportExportService.swift in Sources */,
+				1B0F73C1893A4A22B8C3E902 /* LocalBackupView.swift in Sources */,
 				FCD3AEAE3122307E04E083FB /* ImportView.swift in Sources */,
 				5DA2930E3CEEE1B09B61FFDF /* KeywordRule.swift in Sources */,
 				E3A49C62D41D34448720242E /* KeywordRulesTable.swift in Sources */,
@@ -882,6 +893,7 @@
 				EF3C631FCB1A0983C1E3C8B8 /* PriceHistoryFormView.swift in Sources */,
 				2304451380DB072548A0AAAB /* PriceInsightService.swift in Sources */,
 				CDE6C67159EF2C8E0280C891 /* ProfileView.swift in Sources */,
+				1B0F73C1893A4A22B8C3E903 /* PersistenceRecoveryView.swift in Sources */,
 				D1A2B3C4D5E6F708192A3B4C /* ShortcutTutorialView.swift in Sources */,
 				8B8AD0E92F98B1606D136AAE /* QuickRecordView.swift in Sources */,
 				5CC4E7711668A47A41535182 /* ReceiptCardView.swift in Sources */,

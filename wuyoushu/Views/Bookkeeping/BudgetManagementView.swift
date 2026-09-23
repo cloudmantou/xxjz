@@ -8,6 +8,7 @@ struct BudgetManagementView: View {
     @State private var showAddBudgetSheet = false
     @State private var newCategoryKey = ""
     @State private var newAmount = ""
+    @State private var saveErrorMessage: String?
 
     var body: some View {
         LazyVStack(spacing: 16) {
@@ -239,13 +240,15 @@ struct BudgetManagementView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("保存") {
-                        saveBudget()
-                        showAddBudgetSheet = false
+                        if saveBudget() {
+                            showAddBudgetSheet = false
+                        }
                     }
                     .foregroundColor(.warmTeal)
                     .disabled(newCategoryKey.isEmpty || Double(newAmount) == nil)
                 }
             }
+            .persistenceSaveErrorAlert($saveErrorMessage)
         }
     }
 
@@ -260,8 +263,8 @@ struct BudgetManagementView: View {
         }
     }
 
-    private func saveBudget() {
-        guard let amount = Double(newAmount), !newCategoryKey.isEmpty else { return }
+    private func saveBudget() -> Bool {
+        guard let amount = Double(newAmount), !newCategoryKey.isEmpty else { return false }
 
         let month = viewModel.selectedMonth.startOfMonth
 
@@ -284,13 +287,20 @@ struct BudgetManagementView: View {
                     month: month
                 )
             }
-            try viewContext.save()
+        } catch {
+            viewContext.rollback()
+            saveErrorMessage = error.localizedDescription
+            return false
+        }
+
+        guard let error = PersistenceSaveCoordinator.save(viewContext) else {
             viewModel.loadBudget(from: viewContext)
             newCategoryKey = ""
             newAmount = ""
-        } catch {
-            print("Failed to save budget: \(error)")
+            return true
         }
+        saveErrorMessage = error
+        return false
     }
 }
 

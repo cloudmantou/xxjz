@@ -22,6 +22,7 @@ struct WishlistFormView: View {
     @State private var imageData: Data?
     @State private var isRecognizing = false
     @State private var recognitionMessage: String?
+    @State private var saveErrorMessage: String?
 
     var isEditing: Bool {
         if case .edit = mode { return true }
@@ -145,6 +146,7 @@ struct WishlistFormView: View {
             }
             .navigationTitle(isEditing ? "编辑心愿" : "添加心愿")
             .navigationBarTitleDisplayMode(.inline)
+            .persistenceSaveErrorAlert($saveErrorMessage)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {
@@ -205,8 +207,11 @@ struct WishlistFormView: View {
             )
         }
 
-        try? viewContext.save()
-        dismiss()
+        guard let error = PersistenceSaveCoordinator.save(viewContext) else {
+            dismiss()
+            return
+        }
+        saveErrorMessage = error
     }
 
     @MainActor

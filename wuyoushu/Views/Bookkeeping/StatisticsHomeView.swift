@@ -73,9 +73,9 @@ struct StatisticsHomeView: View {
     private var rankTransactions: [BookkeepingTransaction] {
         switch selectedRankType {
         case .expense:
-            return monthTransactions.filter { !$0.isIncome && !$0.notInBudget && $0.categoryKey != "transfer" }
+            return monthTransactions.filter { $0.contributesToExpense && !$0.notInBudget }
         case .income:
-            return monthTransactions.filter { $0.isIncome }
+            return monthTransactions.filter(\.contributesToIncome)
         }
     }
 
@@ -120,7 +120,7 @@ struct StatisticsHomeView: View {
         var map: [Int: Double] = [:]
         let calendar = Calendar.current
 
-        for tx in monthTransactions where !tx.isIncome && !tx.notInBudget {
+        for tx in monthTransactions where tx.contributesToExpense && !tx.notInBudget {
             let day = calendar.component(.day, from: tx.date)
             map[day, default: 0] += tx.normalizedAmount
         }
@@ -135,7 +135,7 @@ struct StatisticsHomeView: View {
         let calendar = Calendar.current
         var dailyMap: [Date: Double] = [:]
 
-        for tx in monthTransactions where !tx.isIncome && !tx.notInBudget {
+        for tx in monthTransactions where tx.contributesToExpense && !tx.notInBudget {
             let dayStart = calendar.startOfDay(for: tx.date)
             dailyMap[dayStart, default: 0] += tx.normalizedAmount
         }

@@ -25,6 +25,7 @@ struct BillDetailView: View {
     @State private var showDeleteConfirm = false
     @State private var showRefundConfirm = false
     @State private var isCommitting = false
+    @State private var saveErrorMessage: String?
 
     private var categoryEmoji: String {
         BookkeepingCategory.find(key: editCategoryKey)?.emoji ?? "📦"
@@ -86,6 +87,7 @@ struct BillDetailView: View {
         .confirmationDialog("生成退款冲销记录？", isPresented: $showRefundConfirm, titleVisibility: .visible) {
             Button("退款", role: .destructive) { createRefund() }
         }
+        .persistenceSaveErrorAlert($saveErrorMessage)
         .onAppear { loadTransaction() }
     }
 
@@ -417,14 +419,8 @@ struct BillDetailView: View {
         transaction.notInBudget = editNotInBudget
         transaction.billSource = editBillSource.isEmpty ? nil : editBillSource
 
-        do {
-            try viewContext.save()
-            isCommitting = false
-        } catch {
-            viewContext.rollback()
-            isCommitting = false
-            print("[BillDetailView] save failed: \(error)")
-        }
+        saveErrorMessage = PersistenceSaveCoordinator.save(viewContext)
+        isCommitting = false
     }
 
     private func deleteTransaction() {
@@ -434,15 +430,13 @@ struct BillDetailView: View {
         isCommitting = true
         viewContext.delete(transaction)
 
-        do {
-            try viewContext.save()
-            self.transaction = nil
-            dismiss()
-        } catch {
-            viewContext.rollback()
+        if let error = PersistenceSaveCoordinator.save(viewContext) {
+            saveErrorMessage = error
             isCommitting = false
-            print("[BillDetailView] delete failed: \(error)")
+            return
         }
+        self.transaction = nil
+        dismiss()
     }
 
     private func createRefund() {
@@ -466,13 +460,11 @@ struct BillDetailView: View {
             merchantName: transaction.merchantName
         )
 
-        do {
-            try viewContext.save()
-            dismiss()
-        } catch {
-            viewContext.rollback()
+        if let error = PersistenceSaveCoordinator.save(viewContext) {
+            saveErrorMessage = error
             isCommitting = false
-            print("[BillDetailView] refund failed: \(error)")
+            return
         }
+        dismiss()
     }
 }

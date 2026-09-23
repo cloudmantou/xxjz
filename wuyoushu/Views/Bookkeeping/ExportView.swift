@@ -223,9 +223,9 @@ final class ExportViewModel: ObservableObject {
         }
 
         if options.includeExpense && !options.includeIncome {
-            predicates.append(NSPredicate(format: "isIncome == NO"))
+            predicates.append(NSPredicate(format: "isIncome == NO AND categoryKey != %@", "transfer"))
         } else if options.includeIncome && !options.includeExpense {
-            predicates.append(NSPredicate(format: "isIncome == YES"))
+            predicates.append(NSPredicate(format: "isIncome == YES AND categoryKey != %@", "transfer"))
         }
 
         if !predicates.isEmpty {
@@ -246,7 +246,12 @@ final class ExportViewModel: ObservableObject {
         for tx in transactions {
             let dateStr = tx.date.formatted(as: "yyyy-MM-dd HH:mm")
             let amountStr = String(format: "%.2f", tx.amount)
-            let typeStr = tx.isIncome ? "收入" : "支出"
+            let typeStr: String
+            switch tx.kind {
+            case .income: typeStr = "收入"
+            case .expense: typeStr = "支出"
+            case .transfer: typeStr = "转账"
+            }
             let categoryStr = tx.categoryName
             let subcategoryStr = tx.subcategoryName ?? ""
             let noteStr = tx.note ?? ""
@@ -272,7 +277,7 @@ final class ExportViewModel: ObservableObject {
                 billSourceStr,
                 createdAtStr
             ]
-            .map { "\"\($0)\"" }
+            .map(CSVCodec.escapeField)
             .joined(separator: ",")
 
             csv += row + "\n"

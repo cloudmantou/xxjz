@@ -118,8 +118,9 @@ final class KeywordRulesTable {
     // MARK: - CRUD Operations
 
     /// Insert or replace a rule
-    func upsertRule(_ rule: KeywordRule) {
-        guard let db = db else { return }
+    @discardableResult
+    func upsertRule(_ rule: KeywordRule) -> Bool {
+        guard let db = db else { return false }
 
         do {
             try db.transaction {
@@ -141,14 +142,17 @@ final class KeywordRulesTable {
                     try replaceSearchTexts(searchTexts, forRuleId: rule.ruleId, in: db)
                 }
             }
+            return true
         } catch {
             print("[KeywordRulesTable] Upsert failed: \(error)")
+            return false
         }
     }
 
     /// Batch insert rules (for API sync)
-    func upsertRules(_ rules: [KeywordRule]) {
-        guard let db = db else { return }
+    @discardableResult
+    func upsertRules(_ rules: [KeywordRule]) -> Bool {
+        guard let db = db else { return false }
 
         do {
             try db.transaction {
@@ -172,8 +176,62 @@ final class KeywordRulesTable {
                     }
                 }
             }
+            return true
         } catch {
             print("[KeywordRulesTable] Batch upsert failed: \(error)")
+            return false
+        }
+    }
+
+    @discardableResult
+    func replaceAllRules(_ rules: [KeywordRule]) -> Bool {
+        guard let db = db else { return false }
+
+        do {
+            try db.transaction {
+                try db.run(searchTextTable.delete())
+                try db.run(table.delete())
+                for rule in rules {
+                    let insert = table.insert(or: .replace,
+                        colRuleId <- Int64(rule.ruleId),
+                        colKeyWord <- rule.keyWord,
+                        colMemberId <- rule.memberId,
+                        colType <- Int64(rule.type.rawValue),
+                        colMemberCateId <- Int64(rule.memberCateId),
+                        colBillsBookId <- Int64(rule.billsBookId),
+                        colKeyWordSource <- Int64(rule.keyWordSource.rawValue),
+                        colFundAccountId <- Int64(rule.fundAccountId),
+                        colMemberTagIds <- rule.memberTagIds,
+                        colCreateDate <- rule.createDate,
+                        colUpdateDate <- rule.updateDate
+                    )
+                    try db.run(insert)
+                    if let searchTexts = rule.searchTexts {
+                        try replaceSearchTexts(searchTexts, forRuleId: rule.ruleId, in: db)
+                    }
+                }
+            }
+            return true
+        } catch {
+            print("[KeywordRulesTable] Replace all rules failed: \(error)")
+            return false
+        }
+    }
+
+    /// Delete a single rule and all of its search-text rows atomically.
+    @discardableResult
+    func deleteRule(byId ruleId: Int) -> Bool {
+        guard let db = db else { return false }
+
+        do {
+            try db.transaction {
+                try db.run(searchTextTable.filter(stColRuleId == Int64(ruleId)).delete())
+                try db.run(table.filter(colRuleId == Int64(ruleId)).delete())
+            }
+            return true
+        } catch {
+            print("[KeywordRulesTable] Delete rule failed: \(error)")
+            return false
         }
     }
 
@@ -265,6 +323,20 @@ final class KeywordRulesTable {
         } catch {
             print("[KeywordRulesTable] Fetch all failed: \(error)")
             return []
+        }
+    }
+
+    func fetchAllRulesStrict() throws -> [KeywordRule] {
+        guard let db else { throw KeywordRulesTableError.unavailable }
+        let query = table.order(colKeyWordSource.asc, colRuleId.asc)
+        let rules = try db.prepare(query).map(rowToKeywordRule)
+        return try rules.map { rule in
+            var enriched = rule
+            let searchQuery = searchTextTable
+                .filter(stColRuleId == Int64(rule.ruleId))
+                .order(stColIndex.asc, stColId.asc)
+            enriched.searchTexts = try db.prepare(searchQuery).map(rowToSearchText)
+            return enriched
         }
     }
 
@@ -461,6 +533,10 @@ final class KeywordRulesTable {
             try db.run(insert)
         }
     }
+}
+
+enum KeywordRulesTableError: Error {
+    case unavailable
 }
 
 // MARK: - Convenience Methods for Common Queries

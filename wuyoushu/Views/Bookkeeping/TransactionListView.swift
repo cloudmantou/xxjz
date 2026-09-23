@@ -136,7 +136,7 @@ struct TransactionListView: View {
                 Text(formatDate(date))
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                let dayExpense = transactions.filter { !$0.isIncome }.reduce(0) { $0 + $1.normalizedAmount }
+                let dayExpense = transactions.filter(\.contributesToExpense).reduce(0) { $0 + $1.normalizedAmount }
                 if dayExpense > 0 {
                     Text("-\(dayExpense.currencyString)")
                         .font(.caption.weight(.semibold))
@@ -194,9 +194,13 @@ struct TransactionListView: View {
 
             Spacer()
 
-            Text(transaction.isIncome ? "+\(transaction.normalizedAmount.currencyString)" : "-\(transaction.normalizedAmount.currencyString)")
+            Text(transaction.amountDisplayText)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(transaction.isIncome ? Color.profitGreen : Color.lossRed)
+                .foregroundStyle(
+                    transaction.kind == .income
+                        ? Color.profitGreen
+                        : (transaction.kind == .transfer ? Color.secondary : Color.lossRed)
+                )
         }
         .padding(.vertical, 8)
     }

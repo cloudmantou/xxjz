@@ -65,6 +65,20 @@ class CustomCategoryStore: ObservableObject {
         save()
     }
 
+    /// Replaces all custom categories only after their encoded snapshot is durable.
+    @discardableResult
+    func replaceAll(_ replacements: [CustomCategory]) -> Bool {
+        guard let data = try? JSONEncoder().encode(replacements) else { return false }
+        UserDefaults.standard.set(data, forKey: storageKey)
+        categories = replacements
+        return true
+    }
+
+    func backupSnapshot() throws -> [CustomCategory] {
+        guard let data = UserDefaults.standard.data(forKey: storageKey) else { return categories }
+        return try JSONDecoder().decode([CustomCategory].self, from: data)
+    }
+
     func find(key: String) -> CustomCategory? {
         guard key.hasPrefix("custom_") else { return nil }
         let id = String(key.dropFirst("custom_".count))

@@ -10,6 +10,7 @@ struct PlatformPriceFormView: View {
     @State private var platform: String = WishlistPlatformPrice.platforms.first ?? ""
     @State private var price: String = ""
     @State private var url: String = ""
+    @State private var saveErrorMessage: String?
 
     var isValid: Bool {
         !platform.isEmpty && Double(price) != nil && (Double(price) ?? 0) > 0
@@ -66,6 +67,7 @@ struct PlatformPriceFormView: View {
             }
             .navigationTitle("添加平台价格")
             .navigationBarTitleDisplayMode(.inline)
+            .persistenceSaveErrorAlert($saveErrorMessage)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {
@@ -97,8 +99,11 @@ struct PlatformPriceFormView: View {
         item.platformPrices.append(platformPrice)
         item.updatedAt = Date()
 
-        try? viewContext.save()
-        dismiss()
+        guard let error = PersistenceSaveCoordinator.save(viewContext) else {
+            dismiss()
+            return
+        }
+        saveErrorMessage = error
     }
 }
 
