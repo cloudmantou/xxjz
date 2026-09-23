@@ -6,9 +6,10 @@ final class DayDetailViewModel: ObservableObject {
     @Published var selectedDate: Date
     @Published var transactions: [BookkeepingTransaction] = []
     @Published var categoryBreakdown: [(emoji: String, name: String, amount: Double, percent: Int, barWidth: CGFloat)] = []
+    @Published var saveErrorMessage: String?
 
-    var dayIncome: Double { transactions.filter { $0.isIncome }.reduce(0) { $0 + $1.normalizedAmount } }
-    var dayExpense: Double { transactions.filter { !$0.isIncome }.reduce(0) { $0 + $1.normalizedAmount } }
+    var dayIncome: Double { transactions.filter(\.contributesToIncome).reduce(0) { $0 + $1.normalizedAmount } }
+    var dayExpense: Double { transactions.filter(\.contributesToExpense).reduce(0) { $0 + $1.normalizedAmount } }
     var dayBalance: Double { dayIncome - dayExpense }
     var transactionCount: Int { transactions.count }
 
@@ -34,19 +35,20 @@ final class DayDetailViewModel: ObservableObject {
         }
     }
 
+    @MainActor
     func deleteTransaction(_ transaction: BookkeepingTransaction, context: NSManagedObjectContext) {
         context.delete(transaction)
-        do {
-            try context.save()
-            transactions.removeAll { $0.objectID == transaction.objectID }
-            computeCategoryBreakdown()
-        } catch {
-            print("Failed to delete: \(error)")
+        if let error = PersistenceSaveCoordinator.save(context) {
+            saveErrorMessage = error
+            return
         }
+        saveErrorMessage = nil
+        transactions.removeAll { $0.objectID == transaction.objectID }
+        computeCategoryBreakdown()
     }
 
     private func computeCategoryBreakdown() {
-        let expenses = transactions.filter { !$0.isIncome }
+        let expenses = transactions.filter(\.contributesToExpense)
         let totalExpense = expenses.reduce(0) { $0 + $1.normalizedAmount }
 
         guard totalExpense > 0 else {

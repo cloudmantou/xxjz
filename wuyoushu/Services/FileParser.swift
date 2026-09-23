@@ -48,46 +48,85 @@ final class CsvParser: FileParser {
             throw ImportError.parseError("无法识别文件编码，请将文件保存为 UTF-8 编码后重试")
         }
 
-        let lines = finalContent.components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-
-        guard !lines.isEmpty else { return ([], []) }
-
-        let delimiter = detectDelimiter(firstLine: lines[0])
-        let columns = parseCSVLine(lines[0], delimiter: delimiter)
-
-        let rows = lines.dropFirst().map { parseCSVLine($0, delimiter: delimiter) }
-        return (columns, Array(rows))
+        let records = try Self.parseCSVText(finalContent)
+        guard let columns = records.first else { return ([], []) }
+        return (columns, Array(records.dropFirst()))
     }
 
-    private func detectDelimiter(firstLine: String) -> Character {
-        let commaCount = firstLine.filter { $0 == "," }.count
-        let tabCount = firstLine.filter { $0 == "\t" }.count
-        let semicolonCount = firstLine.filter { $0 == ";" }.count
+    static func parseCSVText(_ content: String) throws -> [[String]] {
+        let normalizedContent = content.hasPrefix("\u{FEFF}") ? String(content.dropFirst()) : content
+        let characters = Array(normalizedContent)
+        let delimiter = detectDelimiter(in: characters)
 
-        if tabCount >= commaCount && tabCount >= semicolonCount { return "\t" }
-        if semicolonCount > commaCount { return ";" }
-        return ","
-    }
-
-    private func parseCSVLine(_ line: String, delimiter: Character) -> [String] {
-        var result: [String] = []
+        var rows: [[String]] = []
+        var row: [String] = []
         var current = ""
         var inQuotes = false
+        var index = 0
 
-        for char in line {
+        while index < characters.count {
+            let char = characters[index]
             if char == "\"" {
+                if inQuotes, index + 1 < characters.count, characters[index + 1] == "\"" {
+                    current.append("\"")
+                    index += 2
+                    continue
+                }
                 inQuotes.toggle()
             } else if char == delimiter && !inQuotes {
-                result.append(current.trimmingCharacters(in: .whitespaces))
+                row.append(current.trimmingCharacters(in: .whitespaces))
                 current = ""
+            } else if (char == "\n" || char == "\r") && !inQuotes {
+                row.append(current.trimmingCharacters(in: .whitespaces))
+                if row.contains(where: { !$0.isEmpty }) {
+                    rows.append(row)
+                }
+                row = []
+                current = ""
+                if char == "\r", index + 1 < characters.count, characters[index + 1] == "\n" {
+                    index += 1
+                }
             } else {
                 current.append(char)
             }
+            index += 1
         }
-        result.append(current.trimmingCharacters(in: .whitespaces))
-        return result
+
+        guard !inQuotes else {
+            throw ImportError.parseError("CSV 引号不完整，请检查文件内容后重试")
+        }
+        row.append(current.trimmingCharacters(in: .whitespaces))
+        if row.contains(where: { !$0.isEmpty }) {
+            rows.append(row)
+        }
+        return rows
+    }
+
+    private static func detectDelimiter(in characters: [Character]) -> Character {
+        var counts: [Character: Int] = [",": 0, "\t": 0, ";": 0]
+        var inQuotes = false
+        var index = 0
+
+        while index < characters.count {
+            let char = characters[index]
+            if char == "\"" {
+                if inQuotes, index + 1 < characters.count, characters[index + 1] == "\"" {
+                    index += 2
+                    continue
+                }
+                inQuotes.toggle()
+            } else if (char == "\n" || char == "\r") && !inQuotes {
+                break
+            } else if !inQuotes, counts[char] != nil {
+                counts[char, default: 0] += 1
+            }
+            index += 1
+        }
+
+        return counts.max { lhs, rhs in
+            if lhs.value == rhs.value { return lhs.key != "," && rhs.key == "," }
+            return lhs.value < rhs.value
+        }?.key ?? ","
     }
 }
 

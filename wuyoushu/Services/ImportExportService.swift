@@ -1,5 +1,6 @@
 import Foundation
 import CoreData
+import CryptoKit
 import UniformTypeIdentifiers
 
 // MARK: - Import Models
@@ -33,8 +34,6 @@ struct ImportFileModel {
 }
 
 enum ImportFileFormat: String {
-    case xlsx = "xlsx"
-    case xls = "xls"
     case csv = "csv"
 }
 
@@ -60,6 +59,22 @@ private struct ImportDeduplicationKey: Hashable, Sendable {
     let fundAccountKey: String
     let note: String
     let merchant: String
+
+    var fingerprint: String {
+        let fields = [
+            String(minute),
+            String(amountInCents),
+            isIncome ? "income" : "expense",
+            categoryKey,
+            subcategoryKey,
+            fundAccountKey,
+            note,
+            merchant
+        ]
+        let canonicalValue = fields.map { "\($0.utf8.count):\($0)" }.joined(separator: "|")
+        let digest = SHA256.hash(data: Data(canonicalValue.utf8))
+        return digest.map { String(format: "%02x", Int($0)) }.joined()
+    }
 }
 
 // MARK: - Category Matching
@@ -128,16 +143,11 @@ final class ImportExportService: ObservableObject {
     /// 解析文件（xlsx/xls/csv）返回行数据
     func parseFile(at url: URL) async throws -> ImportFileModel {
         let fileName = url.lastPathComponent
-        let fileSize = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64 ?? 0
-
-        let format = detectFormat(fileName: fileName)
-        let parser: FileParser = switch format {
-        case .xlsx: XlsxParser()
-        case .xls: XlsParser()
-        case .csv: CsvParser()
+        guard url.pathExtension.lowercased() == "csv" else {
+            throw ImportError.parseError("账单导入目前只支持 CSV，请先将 Excel 文件另存为 CSV 后重试")
         }
-
-        let (columns, rows) = try await parser.parse(url: url)
+        let fileSize = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64 ?? 0
+        let (columns, rows) = try await CsvParser().parse(url: url)
 
         guard !rows.isEmpty else {
             throw ImportError.emptyFile
@@ -149,7 +159,7 @@ final class ImportExportService: ObservableObject {
             fileSize: fileSize,
             rowCount: rows.count,
             columns: columns,
-            detectedFormat: format
+            detectedFormat: .csv
         )
     }
 
@@ -316,6 +326,31 @@ final class ImportExportService: ObservableObject {
             .sorted { $0.occurrenceCount > $1.occurrenceCount }
     }
 
+    func duplicateCountPreview(records: [ImportBillRecord]) throws -> Int {
+        var seenFingerprints = Set<String>()
+        try viewContext.performAndWait {
+            let existingTransactions = try viewContext.fetch(BookkeepingTransaction.fetchRequest())
+            seenFingerprints = Set(existingTransactions.map { transaction in
+                transaction.importFingerprint ?? Self.transactionKey(for: transaction).fingerprint
+            })
+        }
+
+        var duplicateCount = 0
+        for record in records {
+            let categoryKey = record.matchedCategoryKey ?? "pending:\(normalizedCategoryName(record.categoryName))"
+            guard categoryKey != "pending:" else { continue }
+            let key = Self.transactionKey(
+                for: record,
+                categoryKey: categoryKey,
+                fundAccountKey: matchFundAccount(record.fundAccountName)
+            )
+            if !seenFingerprints.insert(key.fingerprint).inserted {
+                duplicateCount += 1
+            }
+        }
+        return duplicateCount
+    }
+
     /// 执行导入（批量插入 CoreData）
     func executeImport(
         records: [ImportBillRecord],
@@ -326,10 +361,12 @@ final class ImportExportService: ObservableObject {
         var duplicateCount = 0
         var failedCount = 0
 
-        var seenKeys = Set<ImportDeduplicationKey>()
+        var seenFingerprints = Set<String>()
         try viewContext.performAndWait {
             let existingTransactions = try viewContext.fetch(BookkeepingTransaction.fetchRequest())
-            seenKeys = Set(existingTransactions.map { Self.transactionKey(for: $0) })
+            seenFingerprints = Set(existingTransactions.map { transaction in
+                transaction.importFingerprint ?? Self.transactionKey(for: transaction).fingerprint
+            })
         }
 
         guard let coordinator = viewContext.persistentStoreCoordinator else {
@@ -344,7 +381,9 @@ final class ImportExportService: ObservableObject {
         do {
             try importContext.performAndWait {
                 let committedTransactions = try importContext.fetch(BookkeepingTransaction.fetchRequest())
-                seenKeys.formUnion(committedTransactions.map { Self.transactionKey(for: $0) })
+                seenFingerprints.formUnion(committedTransactions.map { transaction in
+                    transaction.importFingerprint ?? Self.transactionKey(for: transaction).fingerprint
+                })
 
                 for record in records {
                     guard let categoryKey = record.matchedCategoryKey else {
@@ -354,7 +393,8 @@ final class ImportExportService: ObservableObject {
 
                     let fundAccountKey = fundAccountKeys[record.id] ?? nil
                     let key = Self.transactionKey(for: record, categoryKey: categoryKey, fundAccountKey: fundAccountKey)
-                    guard seenKeys.insert(key).inserted else {
+                    let fingerprint = key.fingerprint
+                    guard seenFingerprints.insert(fingerprint).inserted else {
                         duplicateCount += 1
                         continue
                     }
@@ -370,7 +410,8 @@ final class ImportExportService: ObservableObject {
                         fundAccountKey: fundAccountKey,
                         notInBudget: false,
                         billSource: "import:\(batchId.uuidString)",
-                        merchantName: record.merchantName
+                        merchantName: record.merchantName,
+                        importFingerprint: fingerprint
                     )
                     importedObjectIDs.append(tx.objectID)
                     importedCount += 1
@@ -467,6 +508,14 @@ final class ImportExportService: ObservableObject {
         )
     }
 
+    private func normalizedCategoryName(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+            .lowercased()
+    }
+
     // MARK: - Export
 
     /// 导出为 xlsx
@@ -477,10 +526,16 @@ final class ImportExportService: ObservableObject {
         let generator = XlsxGenerator()
 
         let rows: [[String]] = transactions.map { tx in
-            [
+            let typeTitle: String
+            switch tx.kind {
+            case .income: typeTitle = "收入"
+            case .expense: typeTitle = "支出"
+            case .transfer: typeTitle = "转账"
+            }
+            return [
                 tx.date.formatted(as: "yyyy-MM-dd HH:mm"),
                 String(format: "%.2f", tx.amount),
-                tx.isIncome ? "收入" : "支出",
+                typeTitle,
                 tx.categoryName,
                 tx.subcategoryName ?? "",
                 tx.note ?? "",
@@ -501,12 +556,6 @@ final class ImportExportService: ObservableObject {
     }
 
     // MARK: - Helpers
-
-    private func detectFormat(fileName: String) -> ImportFileFormat {
-        if fileName.lowercased().hasSuffix(".xlsx") { return .xlsx }
-        if fileName.lowercased().hasSuffix(".xls") { return .xls }
-        return .csv
-    }
 
     private func findBestMatch(
         originalName: String,

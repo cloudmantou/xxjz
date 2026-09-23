@@ -117,6 +117,7 @@ struct StatusBadge: View {
         case .active: return .profitGreen
         case .sold: return .warmTeal
         case .disposed: return .gray
+        case .deleted: return .gray
         }
     }
 
@@ -125,6 +126,7 @@ struct StatusBadge: View {
         case .active: return .profitGreen.opacity(0.12)
         case .sold: return .warmTeal.opacity(0.12)
         case .disposed: return .gray.opacity(0.12)
+        case .deleted: return .gray.opacity(0.12)
         }
     }
 
@@ -133,6 +135,7 @@ struct StatusBadge: View {
         case .active: return .profitGreen
         case .sold: return .warmTeal
         case .disposed: return .gray
+        case .deleted: return .gray
         }
     }
 }

@@ -14,6 +14,7 @@ struct DashboardView: View {
     @State private var detailSheetItem: TransactionDetailSheetItem?
     @State private var pendingDeleteTransaction: BookkeepingTransaction?
     @State private var showDeleteConfirm = false
+    @State private var saveErrorMessage: String?
 
     private var screenWidth: CGFloat {
         UIScreen.main.bounds.width
@@ -50,10 +51,10 @@ struct DashboardView: View {
 
     // MARK: - Computed Day Summary
     private var dayExpense: Double {
-        allDayTransactions.filter { !$0.isIncome }.reduce(0) { $0 + $1.normalizedAmount }
+        allDayTransactions.filter(\.contributesToExpense).reduce(0) { $0 + $1.normalizedAmount }
     }
     private var dayIncome: Double {
-        allDayTransactions.filter { $0.isIncome }.reduce(0) { $0 + $1.normalizedAmount }
+        allDayTransactions.filter(\.contributesToIncome).reduce(0) { $0 + $1.normalizedAmount }
     }
 
     var body: some View {
@@ -110,15 +111,12 @@ struct DashboardView: View {
                 }
             }
         }
+        .persistenceSaveErrorAlert($saveErrorMessage)
     }
 
     private func deleteTransaction(_ tx: BookkeepingTransaction) {
         viewContext.delete(tx)
-        do {
-            try viewContext.save()
-        } catch {
-            print("[DashboardView] delete failed: \(error)")
-        }
+        saveErrorMessage = PersistenceSaveCoordinator.save(viewContext)
         pendingDeleteTransaction = nil
     }
 

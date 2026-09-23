@@ -43,13 +43,7 @@ struct ImportView: View {
             }
             .fileImporter(
                 isPresented: $viewModel.showFilePicker,
-                allowedContentTypes: [
-                    UTType(filenameExtension: "xlsx") ?? .data,
-                    UTType(filenameExtension: "xls") ?? .data,
-                    UTType(filenameExtension: "csv") ?? .commaSeparatedText,
-                    .commaSeparatedText,
-                    .data
-                ],
+                allowedContentTypes: [.commaSeparatedText],
                 allowsMultipleSelection: false
             ) { result in
                 switch result {
@@ -86,7 +80,7 @@ struct ImportView: View {
                 Text("导入账单")
                     .font(.title2.bold())
 
-                Text("支持 .xlsx、.xls、.csv 格式")
+                Text("支持 CSV 格式，Excel 文件请先另存为 CSV")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -309,9 +303,12 @@ struct ImportView: View {
                 Text("确认导入")
                     .font(.title2.bold())
 
-                Text("将导入 \(viewModel.importableCount) 条账单记录")
+                Text("共 \(viewModel.importableCount) 条有效记录，预计新增 \(viewModel.expectedNewCount) 条")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                Text("疑似重复 \(viewModel.duplicatePreviewCount) 条，导入时会跳过")
+                    .font(.caption)
+                    .foregroundStyle(viewModel.duplicatePreviewCount > 0 ? .orange : .secondary)
                 if viewModel.invalidDateCount > 0 {
                     Text("另有 \(viewModel.invalidDateCount) 条日期无法识别，确认后会跳过。")
                         .font(.caption)
@@ -503,6 +500,7 @@ final class ImportViewModel: ObservableObject {
     @Published var duplicateCount = 0
     @Published var failedCount = 0
     @Published var invalidDateCount = 0
+    @Published var duplicatePreviewCount = 0
     @Published var autoCreatedCategoryCount = 0  // 自动创建的新分类数量
 
     private let importService = ImportExportService.shared
@@ -528,7 +526,13 @@ final class ImportViewModel: ObservableObject {
     }
 
     var importableCount: Int {
-        matchedCount
+        importRecords.filter {
+            $0.matchedCategoryKey != nil || !$0.categoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }.count
+    }
+
+    var expectedNewCount: Int {
+        max(0, importableCount - duplicatePreviewCount)
     }
 
     func handleFileSelected(_ url: URL) {
@@ -559,13 +563,7 @@ final class ImportViewModel: ObservableObject {
                 self.fileModel = fileModel
 
                 // Load file content
-                let parser: FileParser = switch fileModel.detectedFormat {
-                case .xlsx: XlsxParser()
-                case .xls: XlsParser()
-                case .csv: CsvParser()
-                }
-
-                let (columns, rows) = try await parser.parse(url: tempUrl)
+                let (columns, rows) = try await CsvParser().parse(url: tempUrl)
                 self.allRows = rows
                 self.firstRow = columns
                 self.previewRows = Array(rows.prefix(5))
@@ -778,12 +776,32 @@ final class ImportViewModel: ObservableObject {
                 matchedKey: nil
             )
         }
+        refreshDuplicatePreview()
     }
 
     func setMapping(for originalName: String, categoryKey: String) {
         if let index = unmatchedCategories.firstIndex(where: { $0.originalName == originalName }) {
             unmatchedCategories[index].matchedKey = categoryKey
             userMappings[originalName] = categoryKey
+            for recordIndex in importRecords.indices where importRecords[recordIndex].categoryName == originalName {
+                importRecords[recordIndex].matchedCategoryKey = categoryKey
+            }
+            refreshDuplicatePreview()
+        }
+    }
+
+    private func refreshDuplicatePreview() {
+        var previewRecords = importRecords
+        for index in previewRecords.indices {
+            if let mapping = userMappings[previewRecords[index].categoryName] {
+                previewRecords[index].matchedCategoryKey = mapping
+            }
+        }
+        do {
+            duplicatePreviewCount = try importService.duplicateCountPreview(records: previewRecords)
+        } catch {
+            duplicatePreviewCount = 0
+            errorMessage = "读取现有账单失败：\(error.localizedDescription)"
         }
     }
 }

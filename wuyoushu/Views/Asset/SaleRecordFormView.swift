@@ -11,6 +11,7 @@ struct SaleRecordFormView: View {
     @State private var saleDate: Date = Date()
     @State private var platform: String = AssetSaleRecord.platforms.first ?? ""
     @State private var notes: String = ""
+    @State private var saveErrorMessage: String?
 
     var isValid: Bool {
         Double(salePrice) != nil && (Double(salePrice) ?? 0) > 0
@@ -65,6 +66,7 @@ struct SaleRecordFormView: View {
             }
             .navigationTitle("记录卖出")
             .navigationBarTitleDisplayMode(.inline)
+            .persistenceSaveErrorAlert($saveErrorMessage)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {
@@ -103,8 +105,11 @@ struct SaleRecordFormView: View {
         asset.currentValue = priceValue
         asset.updatedAt = Date()
 
-        try? viewContext.save()
-        dismiss()
+        guard let error = PersistenceSaveCoordinator.save(viewContext) else {
+            dismiss()
+            return
+        }
+        saveErrorMessage = error
     }
 }
 

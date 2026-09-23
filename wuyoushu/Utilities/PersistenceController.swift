@@ -1,6 +1,47 @@
 import Foundation
 import CoreData
 import Combine
+import SwiftUI
+
+@MainActor
+enum PersistenceSaveCoordinator {
+    /// Saves a user-initiated Core Data change and rolls it back if the store rejects it.
+    static func save(_ context: NSManagedObjectContext) -> String? {
+        do {
+            try context.save()
+            return nil
+        } catch {
+            context.rollback()
+            return error.localizedDescription
+        }
+    }
+}
+
+@MainActor
+private struct PersistenceSaveErrorAlert: ViewModifier {
+    @Binding var message: String?
+
+    func body(content: Content) -> some View {
+        content.alert(
+            "保存失败",
+            isPresented: Binding(
+                get: { message != nil },
+                set: { if !$0 { message = nil } }
+            )
+        ) {
+            Button("好", role: .cancel) { message = nil }
+        } message: {
+            Text(message ?? "请重试。")
+        }
+    }
+}
+
+extension View {
+    @MainActor
+    func persistenceSaveErrorAlert(_ message: Binding<String?>) -> some View {
+        modifier(PersistenceSaveErrorAlert(message: message))
+    }
+}
 
 final class PersistenceController: ObservableObject {
     static let shared = PersistenceController()
@@ -333,7 +374,8 @@ final class PersistenceController: ObservableObject {
             attribute("fundAccountKey", .stringAttributeType, optional: true),
             attribute("notInBudget", .booleanAttributeType),
             attribute("billSource", .stringAttributeType, optional: true),
-            attribute("merchantName", .stringAttributeType, optional: true)
+            attribute("merchantName", .stringAttributeType, optional: true),
+            attribute("importFingerprint", .stringAttributeType, optional: true)
         ]
         if enableUniqueConstraints {
             transactionEntity.uniquenessConstraints = [["id"]]

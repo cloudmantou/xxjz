@@ -6,6 +6,7 @@ struct ProfileView: View {
     @Environment(\.bottomBarInset) private var bottomBarInset: CGFloat
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \AssetItem.updatedAt, ascending: false)],
+        predicate: NSPredicate(format: "statusRaw != %@", AssetStatus.deleted.rawValue),
         animation: .default
     )
     private var assets: FetchedResults<AssetItem>

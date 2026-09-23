@@ -12,8 +12,12 @@ struct AssetsStatisticsView: View {
 
     // MARK: - Summary Metrics
 
+    private var visibleAssets: [AssetItem] {
+        assets.filter { $0.status != .deleted }
+    }
+
     private var activeAssets: [AssetItem] {
-        assets.filter { $0.status == .active }
+        visibleAssets.filter { $0.status == .active }
     }
 
     private var totalCurrentValue: Double {
@@ -29,8 +33,8 @@ struct AssetsStatisticsView: View {
     }
 
     private var activeCount: Int { activeAssets.count }
-    private var soldCount: Int { assets.filter { $0.status == .sold }.count }
-    private var disposedCount: Int { assets.filter { $0.status == .disposed }.count }
+    private var soldCount: Int { visibleAssets.filter { $0.status == .sold }.count }
+    private var disposedCount: Int { visibleAssets.filter { $0.status == .disposed }.count }
 
     // MARK: - Category Distribution
 
@@ -99,7 +103,7 @@ struct AssetsStatisticsView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                if assets.isEmpty {
+                if visibleAssets.isEmpty {
                     emptyState
                 } else {
                     summarySection

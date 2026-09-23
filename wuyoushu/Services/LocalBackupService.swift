@@ -43,6 +43,7 @@ struct LocalBackupTransaction: Codable {
     var notInBudget: Bool
     var billSource: String?
     var merchantName: String?
+    var importFingerprint: String?
 }
 
 struct LocalBackupBudget: Codable {
@@ -208,7 +209,8 @@ final class LocalBackupService {
                     fundAccountKey: $0.fundAccountKey,
                     notInBudget: $0.notInBudget,
                     billSource: $0.billSource,
-                    merchantName: $0.merchantName
+                    merchantName: $0.merchantName,
+                    importFingerprint: $0.importFingerprint
                 )
             }
             budgets = try context.fetch(BudgetEntry.fetchRequest()).map {
@@ -323,7 +325,8 @@ final class LocalBackupService {
                     fundAccountKey: item.fundAccountKey,
                     notInBudget: item.notInBudget,
                     billSource: item.billSource,
-                    merchantName: item.merchantName
+                    merchantName: item.merchantName,
+                    importFingerprint: item.importFingerprint
                 )
             }
             for item in payload.budgets {
