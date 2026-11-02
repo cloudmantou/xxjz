@@ -43,13 +43,7 @@ struct ImportView: View {
             }
             .fileImporter(
                 isPresented: $viewModel.showFilePicker,
-                allowedContentTypes: [
-                    UTType(filenameExtension: "xlsx") ?? .data,
-                    UTType(filenameExtension: "xls") ?? .data,
-                    UTType(filenameExtension: "csv") ?? .commaSeparatedText,
-                    .commaSeparatedText,
-                    .data
-                ],
+                allowedContentTypes: [.commaSeparatedText],
                 allowsMultipleSelection: false
             ) { result in
                 switch result {
@@ -86,7 +80,7 @@ struct ImportView: View {
                 Text("导入账单")
                     .font(.title2.bold())
 
-                Text("支持 .xlsx、.xls、.csv 格式")
+                Text("支持 CSV 格式，Excel 文件请先另存为 CSV")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -309,9 +303,31 @@ struct ImportView: View {
                 Text("确认导入")
                     .font(.title2.bold())
 
-                Text("将导入 \(viewModel.importableCount) 条账单记录")
+                Text("共 \(viewModel.importableCount) 条有效记录，预计新增 \(viewModel.expectedNewCount) 条")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                Text("已导入指纹匹配 \(viewModel.duplicatePreview.confirmedCount) 条，确认重复会自动跳过")
+                    .font(.caption)
+                    .foregroundStyle(viewModel.duplicatePreview.confirmedCount > 0 ? .orange : .secondary)
+                Text("疑似重复 \(viewModel.duplicatePreview.suspectedCount) 条：旧账单字段相似或当前文件内重复")
+                    .font(.caption)
+                    .foregroundStyle(viewModel.duplicatePreview.suspectedCount > 0 ? .orange : .secondary)
+                Toggle(
+                    viewModel.skipSuspectedDuplicates ? "跳过疑似重复" : "仍然导入疑似重复",
+                    isOn: $viewModel.skipSuspectedDuplicates
+                )
+                .font(.subheadline)
+                .disabled(viewModel.duplicatePreview.suspectedCount == 0)
+                Text(viewModel.skipSuspectedDuplicates
+                     ? "已选择跳过疑似重复项。"
+                     : "已选择导入疑似重复项；同一分钟的相同交易也会保留。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                if viewModel.invalidDateCount > 0 {
+                    Text("另有 \(viewModel.invalidDateCount) 条日期无法识别，确认后会跳过。")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
 
             VStack(spacing: 8) {
@@ -392,6 +408,24 @@ struct ImportView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
+                    if viewModel.confirmedDuplicateCount > 0 {
+                        Text("指纹确认重复，已跳过 \(viewModel.confirmedDuplicateCount) 条")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+
+                    if viewModel.suspectedDuplicateSkippedCount > 0 {
+                        Text("按所选策略跳过疑似重复 \(viewModel.suspectedDuplicateSkippedCount) 条")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+
+                    if viewModel.invalidDateCount > 0 {
+                        Text("跳过日期无效记录 \(viewModel.invalidDateCount) 条")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+
                     if viewModel.failedCount > 0 {
                         Text("失败 \(viewModel.failedCount) 条（类别无法匹配）")
                             .font(.caption)
@@ -416,6 +450,12 @@ struct ImportView: View {
                     Text(viewModel.errorMessage ?? "未知错误")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+
+                    if viewModel.invalidDateCount > 0 {
+                        Text("另有 \(viewModel.invalidDateCount) 条记录因日期无法识别而跳过。")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
             }
 
@@ -477,11 +517,18 @@ final class ImportViewModel: ObservableObject {
     // Result
     @Published var importSuccess = false
     @Published var importedCount = 0
+    @Published var duplicateCount = 0
+    @Published var confirmedDuplicateCount = 0
+    @Published var suspectedDuplicateSkippedCount = 0
     @Published var failedCount = 0
+    @Published var invalidDateCount = 0
+    @Published var duplicatePreview = ImportDuplicatePreview()
+    @Published var skipSuspectedDuplicates = true
     @Published var autoCreatedCategoryCount = 0  // 自动创建的新分类数量
 
     private let importService = ImportExportService.shared
     private var importRecords: [ImportBillRecord] = []
+    private var isExecutingImport = false
 
     var canProceed: Bool {
         switch step {
@@ -503,7 +550,14 @@ final class ImportViewModel: ObservableObject {
     }
 
     var importableCount: Int {
-        matchedCount
+        importRecords.filter {
+            $0.matchedCategoryKey != nil || !$0.categoryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }.count
+    }
+
+    var expectedNewCount: Int {
+        let skippedSuspected = skipSuspectedDuplicates ? duplicatePreview.suspectedCount : 0
+        return max(0, importableCount - duplicatePreview.confirmedCount - skippedSuspected)
     }
 
     func handleFileSelected(_ url: URL) {
@@ -534,13 +588,7 @@ final class ImportViewModel: ObservableObject {
                 self.fileModel = fileModel
 
                 // Load file content
-                let parser: FileParser = switch fileModel.detectedFormat {
-                case .xlsx: XlsxParser()
-                case .xls: XlsParser()
-                case .csv: CsvParser()
-                }
-
-                let (columns, rows) = try await parser.parse(url: tempUrl)
+                let (columns, rows) = try await CsvParser().parse(url: tempUrl)
                 self.allRows = rows
                 self.firstRow = columns
                 self.previewRows = Array(rows.prefix(5))
@@ -568,7 +616,12 @@ final class ImportViewModel: ObservableObject {
     }
 
     func executeImport() async {
+        guard !isExecutingImport else { return }
+        isExecutingImport = true
+        defer { isExecutingImport = false }
         step = .importing
+        let originalCategoryIDs = Set(CustomCategoryStore.shared.categories.map(\.id))
+        var newlyCreatedCategories: [CustomCategory] = []
 
         do {
             let mapping = ColumnMapping(
@@ -583,6 +636,7 @@ final class ImportViewModel: ObservableObject {
             )
 
             var records = importService.convertToBillRecords(rows: allRows, columnMapping: mapping)
+            invalidDateCount = importService.invalidDateRowCount
             if records.isEmpty {
                 let amountHeader: String = {
                     guard let idx = amountColumnIndex, idx >= 0, idx < firstRow.count else { return "未知列" }
@@ -646,6 +700,7 @@ final class ImportViewModel: ObservableObject {
 
             // 跟踪自动创建的分类数量
             autoCreatedCategoryCount = createdMappings.count
+            newlyCreatedCategories = CustomCategoryStore.shared.categories.filter { !originalCategoryIDs.contains($0.id) }
 
             // 将新创建的分类映射到记录
             for (i, record) in records.enumerated() {
@@ -655,13 +710,23 @@ final class ImportViewModel: ObservableObject {
                 }
             }
 
-            let batch = try await importService.executeImport(records: records)
+            let batch = try await importService.executeImport(
+                records: records,
+                invalidDateCount: invalidDateCount,
+                skipSuspectedDuplicates: skipSuspectedDuplicates
+            )
 
             importedCount = batch.importedCount
+            duplicateCount = batch.duplicateCount
+            confirmedDuplicateCount = batch.confirmedDuplicateCount
+            suspectedDuplicateSkippedCount = batch.suspectedDuplicateSkippedCount
             failedCount = batch.failedCount
             importSuccess = true
             step = .result
         } catch {
+            for category in newlyCreatedCategories {
+                CustomCategoryStore.shared.delete(category)
+            }
             errorMessage = error.localizedDescription
             importSuccess = false
             step = .result
@@ -722,6 +787,7 @@ final class ImportViewModel: ObservableObject {
         )
 
         importRecords = importService.convertToBillRecords(rows: allRows, columnMapping: mapping)
+        invalidDateCount = importService.invalidDateRowCount
         autoMatchedResults = importService.autoMatchCategories(records: importRecords)
 
         // 将自动匹配结果写回 importRecords，避免已匹配的项出现在待处理列表
@@ -741,12 +807,32 @@ final class ImportViewModel: ObservableObject {
                 matchedKey: nil
             )
         }
+        refreshDuplicatePreview()
     }
 
     func setMapping(for originalName: String, categoryKey: String) {
         if let index = unmatchedCategories.firstIndex(where: { $0.originalName == originalName }) {
             unmatchedCategories[index].matchedKey = categoryKey
             userMappings[originalName] = categoryKey
+            for recordIndex in importRecords.indices where importRecords[recordIndex].categoryName == originalName {
+                importRecords[recordIndex].matchedCategoryKey = categoryKey
+            }
+            refreshDuplicatePreview()
+        }
+    }
+
+    private func refreshDuplicatePreview() {
+        var previewRecords = importRecords
+        for index in previewRecords.indices {
+            if let mapping = userMappings[previewRecords[index].categoryName] {
+                previewRecords[index].matchedCategoryKey = mapping
+            }
+        }
+        do {
+            duplicatePreview = try importService.duplicateCountPreview(records: previewRecords)
+        } catch {
+            duplicatePreview = ImportDuplicatePreview()
+            errorMessage = "读取现有账单失败：\(error.localizedDescription)"
         }
     }
 }

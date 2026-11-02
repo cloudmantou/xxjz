@@ -9,6 +9,7 @@ struct PriceHistoryFormView: View {
 
     @State private var price: String = ""
     @State private var recordedAt: Date = Date()
+    @State private var saveErrorMessage: String?
 
     var isValid: Bool {
         Double(price) != nil && (Double(price) ?? 0) > 0
@@ -54,6 +55,7 @@ struct PriceHistoryFormView: View {
             }
             .navigationTitle("记录价格")
             .navigationBarTitleDisplayMode(.inline)
+            .persistenceSaveErrorAlert($saveErrorMessage)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {
@@ -84,8 +86,11 @@ struct PriceHistoryFormView: View {
         item.priceHistories.append(history)
         item.updatedAt = Date()
 
-        try? viewContext.save()
-        dismiss()
+        guard let error = PersistenceSaveCoordinator.save(viewContext) else {
+            dismiss()
+            return
+        }
+        saveErrorMessage = error
     }
 }
 

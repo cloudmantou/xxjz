@@ -47,6 +47,8 @@ final class RuleUpdateService {
     private static let rulesDynamicNoiseKeywordsKey = "com.wuyoushu.rules.dynamicNoiseKeywords"
     private static let rulesETagKey = "com.wuyoushu.rules.etag"
     private static let rulesInstallIDKey = "com.wuyoushu.rules.installID"
+    /// Bump this when the bundled offline rule set changes.
+    private static let bundledDefaultRulesVersion = 1
 
     fileprivate struct RuleIdentity: Codable, Hashable {
         static let wildcard = "*"
@@ -442,9 +444,9 @@ final class RuleUpdateService {
     func fetchLatestRules(completion: @escaping (Bool) -> Void) {
         guard resolveRemoteConfig() != nil else {
             // 配置为空或占位符时，直接降级本地规则，不发无效请求
-            _ = ensureLocalFallbackRules()
-            lastFetchTime = Date()
-            completion(true)
+            let isReady = ensureLocalRulesAvailable()
+            if isReady { lastFetchTime = Date() }
+            completion(isReady)
             return
         }
 
@@ -489,10 +491,23 @@ final class RuleUpdateService {
     }
 
     /// 插入本地规则（用于用户自定义规则）
-    func insertLocalRule(_ rule: KeywordRule) {
+    @discardableResult
+    func insertLocalRule(_ rule: KeywordRule) -> Bool {
         var localRule = rule
-        // 确保是local类型
-        if localRule.searchTexts == nil {
+        if localRule.ruleId <= 0 || isOccupiedByNonLocalRule(localRule.ruleId) {
+            localRule.ruleId = nextAvailableLocalRuleId()
+        }
+
+        // A local rule must remain local even when it is edited from an existing rule.
+        if let searchTexts = localRule.searchTexts, !searchTexts.isEmpty {
+            let localRuleId = localRule.ruleId
+            localRule.searchTexts = searchTexts.map { searchText in
+                var localSearchText = searchText
+                localSearchText.ruleId = localRuleId
+                localSearchText.ruleKind = .local
+                return localSearchText
+            }
+        } else {
             localRule.searchTexts = [
                 AutoBillSearchText(
                     ruleId: localRule.ruleId,
@@ -509,22 +524,61 @@ final class RuleUpdateService {
                 )
             ]
         }
-        KeywordRulesTable.shared.upsertRule(localRule)
+        guard KeywordRulesTable.shared.upsertRule(localRule) else { return false }
         cachedRules = nil // 清空缓存，下次会重新加载
+        postRulesDidChange()
+        return true
     }
 
     /// 删除本地规则
-    func deleteLocalRule(ruleId: Int) {
-        guard let rule = KeywordRulesTable.shared.fetchRule(byId: ruleId) else { return }
+    @discardableResult
+    func deleteLocalRule(ruleId: Int) -> Bool {
+        guard let rule = KeywordRulesTable.shared.fetchRule(byId: ruleId) else { return false }
         // 只删除本地规则
-        if rule.searchTexts?.first?.ruleKind == .local {
-            let allRules = KeywordRulesTable.shared.fetchAllRules()
-            KeywordRulesTable.shared.deleteAllRules()
-            // 重新插入非本地规则
-            let nonLocalRules = allRules.filter { $0.searchTexts?.first?.ruleKind != .local }
-            KeywordRulesTable.shared.upsertRules(nonLocalRules)
-            cachedRules = nil
-        }
+        guard ruleKind(of: rule) == .local else { return false }
+        guard KeywordRulesTable.shared.deleteRule(byId: ruleId) else { return false }
+        cachedRules = nil
+        postRulesDidChange()
+        return true
+    }
+
+    /// Replaces the full local rule snapshot as part of a user initiated backup restore.
+    /// Rule package caches are updated only after SQLite commits successfully.
+    @discardableResult
+    func replaceRulesForLocalRestore(_ rules: [KeywordRule]) -> Bool {
+        guard KeywordRulesTable.shared.replaceAllRules(rules) else { return false }
+
+        let packageRules = rules.filter { ruleKind(of: $0) != .local }
+        cachedRules = packageRules
+        saveCachedRules(packageRules)
+        saveRulesSnapshot(packageRules, key: Self.rulesActiveSnapshotKey)
+
+        var state = loadPackageState()
+        state.activeRulesChecksum = calculateChecksum(for: packageRules)
+        state.activeSnapshotRef = "local-restore-\(Int(Date().timeIntervalSince1970))"
+        state.publishTime = Date().timeIntervalSince1970
+        state.isRollingBack = false
+        state.lastRollbackReason = nil
+        savePackageState(state)
+        postRulesDidChange()
+        return true
+    }
+
+    private func isOccupiedByNonLocalRule(_ ruleId: Int) -> Bool {
+        guard let existing = KeywordRulesTable.shared.fetchRule(byId: ruleId) else { return false }
+        return existing.searchTexts?.first?.ruleKind != .local
+    }
+
+    private func nextAvailableLocalRuleId() -> Int {
+        repeat {
+            let candidate = Int.random(in: 100_000...999_999)
+            if KeywordRulesTable.shared.fetchRule(byId: candidate) == nil { return candidate }
+        } while true
+    }
+
+    private func postRulesDidChange() {
+        NotificationCenter.default.post(name: .keywordRulesDidActivate, object: nil)
+        NotificationCenter.default.post(name: .keywordRulesDidUpdate, object: nil)
     }
 
     // MARK: - Local Cache
@@ -540,12 +594,49 @@ final class RuleUpdateService {
         }
     }
 
-    private func ensureLocalFallbackRules() -> Bool {
-        let localRules = loadRulesFromSQLite()
-        if localRules.isEmpty {
-            loadDefaultRules()
+    @discardableResult
+    func ensureLocalRulesAvailable() -> Bool {
+        let persistedRules = KeywordRulesTable.shared.fetchAllRules()
+        let persistedPackageRules = persistedRules.filter { ruleKind(of: $0) != .local }
+        if !persistedPackageRules.isEmpty {
+            // SQLite is authoritative; rebuild deleted or stale UserDefaults snapshots from it.
+            cachedRules = persistedPackageRules
+            saveCachedRules(persistedPackageRules)
+            if loadRulesSnapshot(key: Self.rulesActiveSnapshotKey)?.isEmpty != false {
+                saveRulesSnapshot(persistedPackageRules, key: Self.rulesActiveSnapshotKey)
+            }
+            return true
         }
-        return !(cachedRules ?? []).isEmpty
+
+        let packageStatus = self.packageStatus
+        let lastGoodPackage = [
+            loadRulesSnapshot(key: Self.rulesActiveSnapshotKey),
+            loadRulesSnapshot(key: Self.rulesPreviousSnapshotKey),
+            loadCachedRules()
+        ]
+        .compactMap { $0 }
+        .first { !$0.isEmpty && validateRules($0) }
+
+        if let lastGoodPackage {
+            let packageRules = lastGoodPackage.filter { ruleKind(of: $0) != .local }
+            if !packageRules.isEmpty {
+                return activateRules(
+                    packageRules,
+                    baseVersion: packageStatus.baseRulesVersion,
+                    patchVersion: packageStatus.patchRulesVersion,
+                    configVersion: packageStatus.configVersion,
+                    publishedAt: packageStatus.publishTime ?? Date(),
+                    expectedChecksum: nil,
+                    tombstones: loadPackageState().tombstones,
+                    noiseKeywordDelta: nil,
+                    snapshotRef: "recovered-\(packageStatus.activeSnapshotRef ?? "local")",
+                    responseETag: nil,
+                    isRollback: true
+                )
+            }
+        }
+
+        return loadDefaultRules()
     }
 
     private func loadPackageState() -> RulePackageState {
@@ -868,16 +959,21 @@ final class RuleUpdateService {
         }
 
         let previousState = loadPackageState()
-        if let existing = cachedRules ?? loadCachedRules(),
-           !existing.isEmpty {
-            saveRulesSnapshot(existing, key: Self.rulesPreviousSnapshotKey)
+        let existingPackageRules = (cachedRules ?? loadCachedRules() ?? [])
+            .filter { ruleKind(of: $0) != .local }
+        if !existingPackageRules.isEmpty {
+            saveRulesSnapshot(existingPackageRules, key: Self.rulesPreviousSnapshotKey)
         }
 
-        KeywordRulesTable.shared.upsertRules(rules)
+        guard KeywordRulesTable.shared.upsertRules(rules) else {
+            print("[RuleUpdateService] rule package activation failed: local database write failed")
+            return false
+        }
         cachedRules = rules
         saveCachedRules(rules)
         saveRulesSnapshot(rules, key: Self.rulesActiveSnapshotKey)
-        if snapshotRef.hasPrefix("full-") || snapshotRef.hasPrefix("legacy-") || snapshotRef.hasPrefix("default-") {
+        if snapshotRef.hasPrefix("full-") || snapshotRef.hasPrefix("legacy-") ||
+            snapshotRef.hasPrefix("default-") || snapshotRef.hasPrefix("bundled-default-") {
             saveRulesSnapshot(rules, key: Self.rulesBaseSnapshotKey)
         }
 
@@ -1325,6 +1421,13 @@ final class RuleUpdateService {
         print("[RuleUpdateService] \(event): \(extra)")
     }
 
+    private func ruleKind(of rule: KeywordRule) -> RuleKind {
+        if let kind = rule.searchTexts?.first?.ruleKind { return kind }
+        return (rule.memberId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            ? .local
+            : .auto
+    }
+
     private func validateRules(_ rules: [KeywordRule]) -> Bool {
         guard !rules.isEmpty else { return false }
         let ids = Set(rules.map(\.ruleId))
@@ -1622,18 +1725,19 @@ extension Notification.Name {
 extension RuleUpdateService {
 
     /// 获取默认规则（当SQLite为空时使用）
-    func loadDefaultRules() {
+    @discardableResult
+    func loadDefaultRules() -> Bool {
         let defaultRules = buildDefaultRules()
-        _ = activateRules(
+        return activateRules(
             defaultRules,
-            baseVersion: max(1, packageStatus.baseRulesVersion),
-            patchVersion: max(1, packageStatus.patchRulesVersion),
-            configVersion: max(1, packageStatus.configVersion),
+            baseVersion: Self.bundledDefaultRulesVersion,
+            patchVersion: Self.bundledDefaultRulesVersion,
+            configVersion: Self.bundledDefaultRulesVersion,
             publishedAt: Date(),
             expectedChecksum: nil,
             tombstones: loadPackageState().tombstones,
             noiseKeywordDelta: nil,
-            snapshotRef: "default-\(Int(Date().timeIntervalSince1970))",
+            snapshotRef: "bundled-default-v\(Self.bundledDefaultRulesVersion)",
             responseETag: nil,
             isRollback: false
         )

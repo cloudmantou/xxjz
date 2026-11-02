@@ -392,12 +392,17 @@ struct AssetLifeApp: App {
     @UIApplicationDelegateAdaptor(AssetLifeAppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var router = AppRouter()
-    private let persistenceController = PersistenceController.shared
+    @StateObject private var persistenceController = PersistenceController.shared
 
     @State private var screenshotBanner: ScreenshotBannerData?
     @State private var hasScheduledConsumption = false
     @State private var hasDonatedLegacyActivities = false
     @AppStorage("didMigrateLegacyShortcutDonations") private var didMigrateLegacyShortcutDonations = false
+
+    init() {
+        // Install or recover the packaged rule set before the UI can start an OCR workflow.
+        _ = RuleUpdateService.shared.ensureLocalRulesAvailable()
+    }
 
     struct ScreenshotBannerData {
         let amount: Double
@@ -410,6 +415,7 @@ struct AssetLifeApp: App {
 
     var body: some Scene {
         WindowGroup {
+            if persistenceController.isStoreReady {
             ZStack(alignment: .top) {
                 MainTabView()
                     .environmentObject(router)
@@ -499,6 +505,9 @@ struct AssetLifeApp: App {
                 _ = ShortcutUserActivityBridge.handle(activity, source: "onContinue(recordFromScreenshot)")
             }
             .environment(\.managedObjectContext, persistenceController.container.viewContext)
+            } else {
+                PersistenceRecoveryView(controller: persistenceController)
+            }
         }
     }
 

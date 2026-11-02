@@ -1,6 +1,12 @@
 import Foundation
 import CoreData
 
+enum TransactionKind: Equatable {
+    case expense
+    case income
+    case transfer
+}
+
 @objc(BookkeepingTransaction)
 final class BookkeepingTransaction: NSManagedObject, Identifiable {
     @nonobjc class func fetchRequest() -> NSFetchRequest<BookkeepingTransaction> {
@@ -19,6 +25,7 @@ final class BookkeepingTransaction: NSManagedObject, Identifiable {
     @NSManaged var notInBudget: Bool
     @NSManaged var billSource: String?
     @NSManaged var merchantName: String?
+    @NSManaged var importFingerprint: String?
 
     convenience init(
         context: NSManagedObjectContext = PersistenceController.preview.container.viewContext,
@@ -33,7 +40,8 @@ final class BookkeepingTransaction: NSManagedObject, Identifiable {
         fundAccountKey: String? = nil,
         notInBudget: Bool = false,
         billSource: String? = nil,
-        merchantName: String? = nil
+        merchantName: String? = nil,
+        importFingerprint: String? = nil
     ) {
         self.init(context: context)
         self.id = id
@@ -48,6 +56,7 @@ final class BookkeepingTransaction: NSManagedObject, Identifiable {
         self.notInBudget = notInBudget
         self.billSource = billSource
         self.merchantName = merchantName
+        self.importFingerprint = importFingerprint
     }
 
     var categoryName: String {
@@ -68,8 +77,30 @@ final class BookkeepingTransaction: NSManagedObject, Identifiable {
         abs(amount)
     }
 
+    /// Derive the current three transaction kinds from the persisted legacy fields.
+    /// New Core Data storage can be introduced with a dedicated migration later.
+    var kind: TransactionKind {
+        if categoryKey == "transfer" { return .transfer }
+        return isIncome ? .income : .expense
+    }
+
+    var contributesToIncome: Bool { kind == .income }
+    var contributesToExpense: Bool { kind == .expense }
+
+    var amountDisplayText: String {
+        switch kind {
+        case .income: return "+\(normalizedAmount.currencyString)"
+        case .expense: return "-\(normalizedAmount.currencyString)"
+        case .transfer: return "↔︎ \(normalizedAmount.currencyString)"
+        }
+    }
+
     /// Signed amount derived from transaction type (income positive, expense negative).
     var signedAmount: Double {
-        isIncome ? normalizedAmount : -normalizedAmount
+        switch kind {
+        case .income: return normalizedAmount
+        case .expense: return -normalizedAmount
+        case .transfer: return 0
+        }
     }
 }

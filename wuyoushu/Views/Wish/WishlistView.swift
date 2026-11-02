@@ -28,6 +28,7 @@ struct WishlistView: View {
     @State private var showingAddSheet = false
     @State private var searchText = ""
     @State private var sortOption: SortOption = .priority
+    @State private var saveErrorMessage: String?
 
     private var screenWidth: CGFloat {
         UIScreen.main.bounds.width
@@ -170,6 +171,7 @@ struct WishlistView: View {
             .sheet(isPresented: $showingAddSheet) {
                 WishlistFormView(mode: .add)
             }
+            .persistenceSaveErrorAlert($saveErrorMessage)
         }
     }
 
@@ -188,7 +190,7 @@ struct WishlistView: View {
                     .contextMenu {
                         Button(role: .destructive) {
                             viewContext.delete(item)
-                            try? viewContext.save()
+                            saveErrorMessage = PersistenceSaveCoordinator.save(viewContext)
                         } label: {
                             Label("删除", systemImage: "trash")
                         }

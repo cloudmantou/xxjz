@@ -5,14 +5,18 @@ struct AssetBatchManagementView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \AssetItem.updatedAt, ascending: false)],
-        predicate: NSPredicate(format: "statusRaw == %@", "active"),
+        predicate: NSPredicate(
+            format: "statusRaw IN %@",
+            [AssetStatus.active.rawValue, "active"]
+        ),
         animation: .default
     )
     private var assets: FetchedResults<AssetItem>
 
     @State private var selectedAssets: Set<UUID> = []
     @State private var showingDeleteConfirmation = false
-    @State private var showingRetireConfirmation = false
+    @State private var showingDisposeConfirmation = false
+    @State private var saveErrorMessage: String?
 
     var selectedCount: Int { selectedAssets.count }
 
@@ -73,12 +77,12 @@ struct AssetBatchManagementView: View {
                             Divider()
                             HStack(spacing: 24) {
                                 Button {
-                                    showingRetireConfirmation = true
+                                    showingDisposeConfirmation = true
                                 } label: {
                                     VStack(spacing: 4) {
-                                        Image(systemName: "tag.fill")
+                                        Image(systemName: "xmark.bin.fill")
                                             .font(.title2)
-                                        Text("标记卖出")
+                                        Text("标记报废")
                                             .font(.caption)
                                     }
                                 }
@@ -105,19 +109,20 @@ struct AssetBatchManagementView: View {
         .navigationTitle("批量管理")
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("确认删除", isPresented: $showingDeleteConfirmation) {
-            Button("删除 \(selectedCount) 项资产", role: .destructive) {
+            Button("移至恢复管理 \(selectedCount) 项资产", role: .destructive) {
                 batchDelete()
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("删除后可在恢复管理中恢复，但已删除的附加成本和卖出记录无法恢复。")
+            Text("资产会移至恢复管理，附加成本和卖出记录会保留。")
         }
-        .confirmationDialog("确认标记", isPresented: $showingRetireConfirmation) {
-            Button("标记为已卖出") {
-                batchRetire()
+        .confirmationDialog("确认报废", isPresented: $showingDisposeConfirmation) {
+            Button("标记为已报废") {
+                batchDispose()
             }
             Button("取消", role: .cancel) {}
         }
+        .persistenceSaveErrorAlert($saveErrorMessage)
     }
 
     private func toggleSelection(_ asset: AssetItem) {
@@ -130,19 +135,25 @@ struct AssetBatchManagementView: View {
 
     private func batchDelete() {
         for asset in assets where selectedAssets.contains(asset.id) {
-            viewContext.delete(asset)
+            asset.moveToRecovery()
         }
-        try? viewContext.save()
-        selectedAssets.removeAll()
+        guard let error = PersistenceSaveCoordinator.save(viewContext) else {
+            selectedAssets.removeAll()
+            return
+        }
+        saveErrorMessage = error
     }
 
-    private func batchRetire() {
+    private func batchDispose() {
         for asset in assets where selectedAssets.contains(asset.id) {
-            asset.status = .sold
+            asset.status = .disposed
             asset.updatedAt = Date()
         }
-        try? viewContext.save()
-        selectedAssets.removeAll()
+        guard let error = PersistenceSaveCoordinator.save(viewContext) else {
+            selectedAssets.removeAll()
+            return
+        }
+        saveErrorMessage = error
     }
 }
 

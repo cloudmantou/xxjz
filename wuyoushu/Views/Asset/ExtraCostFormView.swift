@@ -11,6 +11,7 @@ struct ExtraCostFormView: View {
     @State private var amount: String = ""
     @State private var date: Date = Date()
     @State private var notes: String = ""
+    @State private var saveErrorMessage: String?
 
     var isValid: Bool {
         !costType.isEmpty && Double(amount) != nil && (Double(amount) ?? 0) > 0
@@ -43,6 +44,7 @@ struct ExtraCostFormView: View {
             }
             .navigationTitle("添加附加成本")
             .navigationBarTitleDisplayMode(.inline)
+            .persistenceSaveErrorAlert($saveErrorMessage)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") {
@@ -75,8 +77,11 @@ struct ExtraCostFormView: View {
         asset.extraCosts.append(cost)
         asset.updatedAt = Date()
 
-        try? viewContext.save()
-        dismiss()
+        guard let error = PersistenceSaveCoordinator.save(viewContext) else {
+            dismiss()
+            return
+        }
+        saveErrorMessage = error
     }
 }
 

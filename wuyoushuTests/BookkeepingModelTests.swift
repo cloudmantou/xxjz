@@ -44,6 +44,46 @@ final class BookkeepingModelTests: XCTestCase {
         XCTAssertEqual(transaction.amount, 10000)
     }
 
+    @MainActor
+    func test_transfer_doesNotAffectIncomeExpenseOrBudgetSpend() {
+        let controller = PersistenceController(inMemory: true)
+        let isolatedContext = controller.container.viewContext
+        let transfer = BookkeepingTransaction(
+            context: isolatedContext,
+            amount: 800,
+            categoryKey: "transfer",
+            date: Date(),
+            isIncome: false
+        )
+        _ = BookkeepingTransaction(
+            context: isolatedContext,
+            amount: 25,
+            categoryKey: "dining",
+            date: Date(),
+            isIncome: false
+        )
+        _ = BudgetEntry(
+            context: isolatedContext,
+            categoryKey: "dining",
+            monthlyAmount: 500,
+            month: Date().startOfMonth
+        )
+
+        XCTAssertEqual(transfer.kind, .transfer)
+        XCTAssertFalse(transfer.contributesToIncome)
+        XCTAssertFalse(transfer.contributesToExpense)
+        XCTAssertEqual(transfer.signedAmount, 0)
+
+        let viewModel = BookkeepingViewModel()
+        viewModel.selectedMonth = Date()
+        viewModel.loadStatistics(from: isolatedContext)
+        viewModel.loadBudget(from: isolatedContext)
+
+        XCTAssertEqual(viewModel.monthlyIncome, 0)
+        XCTAssertEqual(viewModel.monthlyExpense, 25)
+        XCTAssertEqual(viewModel.budgetEntries.first(where: { $0.categoryKey == "dining" })?.spent ?? -1, 25)
+    }
+
     func test_transaction_categoryName() {
         let transaction = BookkeepingTransaction(
             context: context,

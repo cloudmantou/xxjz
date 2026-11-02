@@ -20,6 +20,7 @@ struct BookkeepingTabView: View {
     @State private var date = Date()
     @State private var transactionType: TransactionType = .expense
     @State private var notInBudget: Bool = false
+    @State private var saveErrorMessage: String?
 
     private var isIncome: Bool { transactionType == .income }
     private var isTransfer: Bool { transactionType == .transfer }
@@ -35,11 +36,11 @@ struct BookkeepingTabView: View {
     }
 
     private var todayExpense: Double {
-        todayTransactions.filter { !$0.isIncome }.reduce(0) { $0 + $1.normalizedAmount }
+        todayTransactions.filter(\.contributesToExpense).reduce(0) { $0 + $1.normalizedAmount }
     }
 
     private var todayIncome: Double {
-        todayTransactions.filter { $0.isIncome }.reduce(0) { $0 + $1.normalizedAmount }
+        todayTransactions.filter(\.contributesToIncome).reduce(0) { $0 + $1.normalizedAmount }
     }
 
     private var todayBalance: Double {
@@ -79,6 +80,7 @@ struct BookkeepingTabView: View {
             .onAppear {
                 loadDefaults()
             }
+            .persistenceSaveErrorAlert($saveErrorMessage)
         }
     }
 
@@ -195,9 +197,13 @@ struct BookkeepingTabView: View {
 
             Spacer()
 
-            Text(transaction.isIncome ? "+\(transaction.normalizedAmount.currencyString)" : "-\(transaction.normalizedAmount.currencyString)")
+            Text(transaction.amountDisplayText)
                 .font(.system(size: 17, weight: .semibold, design: .rounded))
-                .foregroundStyle(transaction.isIncome ? Color.profitGreen : Color.warmCoral)
+                .foregroundStyle(
+                    transaction.kind == .income
+                        ? Color.profitGreen
+                        : (transaction.kind == .transfer ? Color.secondary : Color.warmCoral)
+                )
                 .monospacedDigit()
         }
         .padding(.vertical, 13)
@@ -588,15 +594,14 @@ struct BookkeepingTabView: View {
             merchantName: nil
         )
 
-        do {
-            try viewContext.save()
+        guard let error = PersistenceSaveCoordinator.save(viewContext) else {
             UserDefaults.standard.set(category, forKey: Constants.Bookkeeping.lastCategoryKey)
             amountString = ""
             note = ""
             hapticFeedback()
-        } catch {
-            // Silent error handling
+            return
         }
+        saveErrorMessage = error
     }
 
     // MARK: - Today Summary Card
@@ -622,9 +627,13 @@ struct BookkeepingTabView: View {
 
             Spacer()
 
-            Text(transaction.isIncome ? "+\(transaction.normalizedAmount.currencyString)" : "-\(transaction.normalizedAmount.currencyString)")
+            Text(transaction.amountDisplayText)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(transaction.isIncome ? Color.profitGreen : Color.warmCoral)
+                .foregroundStyle(
+                    transaction.kind == .income
+                        ? Color.profitGreen
+                        : (transaction.kind == .transfer ? Color.secondary : Color.warmCoral)
+                )
         }
         .padding(.vertical, 11)
     }

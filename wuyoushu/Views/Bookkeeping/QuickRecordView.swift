@@ -37,6 +37,7 @@ struct QuickRecordView: View {
     @State private var isCommittingTransaction = false
     @State private var importedShortcutEventID: String?
     @State private var isShortcutImportedContext = false
+    @State private var saveErrorMessage: String?
 
     @FocusState private var isNoteFocused: Bool
 
@@ -271,6 +272,7 @@ struct QuickRecordView: View {
         .sheet(isPresented: $showCandidateSheet) {
             candidateSelectionSheet
         }
+        .persistenceSaveErrorAlert($saveErrorMessage)
         .onChange(of: transactionType) { _ in
             guard !suppressTypeReset else { return }
             selectedCategory = nil
@@ -989,29 +991,29 @@ struct QuickRecordView: View {
             merchantName: autoDetectedMerchantName
         )
 
-        do {
-            try viewContext.save()
-            saveDefaults(category: category)
-            updateWidgetData()
-
-            hapticFeedback()
-            showDetails = false
-            showAddCategory = false
-            showCandidateSheet = false
-            if let eventID = importedShortcutEventID {
-                ShortcutStorage.markRecordEventConsumed(
-                    eventID,
-                    transactionURI: transaction.objectID.uriRepresentation()
-                )
-            }
-            router.completeQuickRecordAndReturnHome(
-                printTargetURI: transaction.objectID.uriRepresentation()
-            )
+        if let error = PersistenceSaveCoordinator.save(viewContext) {
+            saveErrorMessage = error
             isCommittingTransaction = false
-        } catch {
-            // Silent error handling
-            isCommittingTransaction = false
+            return
         }
+
+        saveDefaults(category: category)
+        updateWidgetData()
+
+        hapticFeedback()
+        showDetails = false
+        showAddCategory = false
+        showCandidateSheet = false
+        if let eventID = importedShortcutEventID {
+            ShortcutStorage.markRecordEventConsumed(
+                eventID,
+                transactionURI: transaction.objectID.uriRepresentation()
+            )
+        }
+        router.completeQuickRecordAndReturnHome(
+            printTargetURI: transaction.objectID.uriRepresentation()
+        )
+        isCommittingTransaction = false
     }
 
     private func fillCurrentFromSelectedCandidate() {
@@ -1087,27 +1089,27 @@ struct QuickRecordView: View {
             }
         }
 
-        do {
-            try viewContext.save()
-            updateWidgetData()
-            hapticFeedback()
-            showCandidateSheet = false
-            showDetails = false
-            showAddCategory = false
-            if let eventID = importedShortcutEventID {
-                ShortcutStorage.markRecordEventConsumed(
-                    eventID,
-                    transactionURI: topmostInsertedTransaction?.objectID.uriRepresentation()
-                )
-            }
-            router.completeQuickRecordAndReturnHome(
-                printTargetURI: topmostInsertedTransaction?.objectID.uriRepresentation()
-            )
+        if let error = PersistenceSaveCoordinator.save(viewContext) {
+            saveErrorMessage = error
             isCommittingTransaction = false
-        } catch {
-            // Keep silent to avoid interrupting quick-entry flow.
-            isCommittingTransaction = false
+            return
         }
+
+        updateWidgetData()
+        hapticFeedback()
+        showCandidateSheet = false
+        showDetails = false
+        showAddCategory = false
+        if let eventID = importedShortcutEventID {
+            ShortcutStorage.markRecordEventConsumed(
+                eventID,
+                transactionURI: topmostInsertedTransaction?.objectID.uriRepresentation()
+            )
+        }
+        router.completeQuickRecordAndReturnHome(
+            printTargetURI: topmostInsertedTransaction?.objectID.uriRepresentation()
+        )
+        isCommittingTransaction = false
     }
 
     private func selectedCandidates() -> [ParsedTransactionCandidatePayload] {
@@ -1592,9 +1594,10 @@ struct QuickRecordView: View {
         let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart.addingTimeInterval(86_400)
         let request: NSFetchRequest<BookkeepingTransaction> = BookkeepingTransaction.fetchRequest()
         request.predicate = NSPredicate(
-            format: "date >= %@ AND date < %@ AND isIncome == NO",
+            format: "date >= %@ AND date < %@ AND isIncome == NO AND categoryKey != %@",
             dayStart as NSDate,
-            dayEnd as NSDate
+            dayEnd as NSDate,
+            "transfer"
         )
 
         do {

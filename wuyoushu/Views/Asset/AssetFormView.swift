@@ -231,12 +231,10 @@ struct AssetFormView: View {
             )
         }
 
-        do {
-            try viewContext.save()
+        if let error = PersistenceSaveCoordinator.save(viewContext) {
+            saveErrorMessage = error
+        } else {
             dismiss()
-        } catch {
-            viewContext.rollback()
-            saveErrorMessage = error.localizedDescription
         }
     }
 

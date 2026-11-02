@@ -13,6 +13,7 @@ struct WishlistDetailView: View {
     @State private var showingPriceHistorySheet = false
     @State private var isFetchingPriceInsight = false
     @State private var priceInsightMessage: String?
+    @State private var saveErrorMessage: String?
 
     var sortedPriceHistory: [WishlistPriceHistory] {
         item.priceHistories.sorted { $0.recordedAt > $1.recordedAt }
@@ -247,10 +248,10 @@ struct WishlistDetailView: View {
 
             // Actions Section
             Section {
-                Button {
-                    item.isPurchased.toggle()
-                    item.updatedAt = Date()
-                    try? viewContext.save()
+                    Button {
+                        item.isPurchased.toggle()
+                        item.updatedAt = Date()
+                        saveErrorMessage = PersistenceSaveCoordinator.save(viewContext)
                 } label: {
                     Label(
                         item.isPurchased ? "标记为未购买" : "标记为已购买",
@@ -293,6 +294,7 @@ struct WishlistDetailView: View {
         .sheet(isPresented: $showingPriceHistorySheet) {
             PriceHistoryFormView(item: item)
         }
+        .persistenceSaveErrorAlert($saveErrorMessage)
     }
 
     private var priorityText: String {
@@ -381,7 +383,7 @@ struct WishlistDetailView: View {
             let price = item.platformPrices[index]
             viewContext.delete(price)
         }
-        try? viewContext.save()
+        saveErrorMessage = PersistenceSaveCoordinator.save(viewContext)
     }
 
     private func convertToAsset() {
@@ -431,7 +433,10 @@ struct WishlistDetailView: View {
             }
 
             item.updatedAt = Date()
-            try viewContext.save()
+            if let error = PersistenceSaveCoordinator.save(viewContext) {
+                priceInsightMessage = "同步失败：\(error)"
+                return
+            }
             priceInsightMessage = "已更新参考价格与历史走势，你可以继续手动修正。"
         } catch {
             priceInsightMessage = "同步失败，请稍后重试。"

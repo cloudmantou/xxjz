@@ -51,7 +51,7 @@ final class DashboardViewModel: ObservableObject {
         request.sortDescriptors = [NSSortDescriptor(keyPath: \AssetItem.purchaseDate, ascending: false)]
 
         do {
-            assets = try context.fetch(request)
+            assets = try context.fetch(request).filter { $0.status != .deleted }
         } catch {
             print("Failed to fetch assets: \(error)")
             assets = []

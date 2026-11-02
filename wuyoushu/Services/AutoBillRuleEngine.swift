@@ -88,7 +88,10 @@ final class AutoBillRuleEngine {
 
         // 3) 都没有时，拉起默认规则
         if merged.isEmpty {
-            RuleUpdateService.shared.loadDefaultRules()
+            _ = RuleUpdateService.shared.ensureLocalRulesAvailable()
+            for rule in KeywordRulesTable.shared.fetchRulesForMatching(memberId: currentMemberId) {
+                merged[rule.ruleId] = hydrateRule(rule)
+            }
             for rule in filterRulesForCurrentMember(
                 RuleUpdateService.shared.currentRules,
                 memberId: currentMemberId

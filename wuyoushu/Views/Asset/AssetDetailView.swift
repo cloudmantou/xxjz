@@ -7,6 +7,7 @@ struct AssetDetailView: View {
     @State private var showingEditSheet = false
     @State private var showingExtraCostSheet = false
     @State private var showingSaleRecordSheet = false
+    @State private var saveErrorMessage: String?
 
     private var aiSummary: String {
         if asset.status == .sold {
@@ -107,7 +108,7 @@ struct AssetDetailView: View {
 
                     Button(role: .destructive) {
                         asset.status = .disposed
-                        try? viewContext.save()
+                        saveErrorMessage = PersistenceSaveCoordinator.save(viewContext)
                     } label: {
                         Label("标记为报废", systemImage: "trash.fill")
                     }
@@ -146,6 +147,7 @@ struct AssetDetailView: View {
         .sheet(isPresented: $showingSaleRecordSheet) {
             SaleRecordFormView(asset: asset)
         }
+        .persistenceSaveErrorAlert($saveErrorMessage)
     }
 
     private func deleteExtraCosts(at offsets: IndexSet) {
@@ -153,7 +155,7 @@ struct AssetDetailView: View {
             let cost = asset.extraCosts[index]
             viewContext.delete(cost)
         }
-        try? viewContext.save()
+        saveErrorMessage = PersistenceSaveCoordinator.save(viewContext)
     }
 
     private func deleteSaleRecords(at offsets: IndexSet) {
@@ -162,7 +164,7 @@ struct AssetDetailView: View {
             viewContext.delete(record)
         }
         asset.status = .active
-        try? viewContext.save()
+        saveErrorMessage = PersistenceSaveCoordinator.save(viewContext)
     }
 }
 
