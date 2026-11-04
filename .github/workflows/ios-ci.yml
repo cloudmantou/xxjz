@@ -42,4 +42,6 @@ jobs:
             -project AssetLife.xcodeproj \
             -scheme AssetLife \
             -destination "id=$SIM_ID" \
+            -testLanguage zh-Hans \
+            -testRegion CN \
             CODE_SIGNING_ALLOWED=NO
