@@ -129,7 +129,7 @@ final class PersistenceController: ObservableObject {
 
     init(inMemory: Bool = false) {
         self.inMemory = inMemory
-        let userWantsCloud = !inMemory && (UserDefaults.standard.object(forKey: Constants.ICloud.cloudSyncPreferenceKey) as? Bool ?? true)
+        let userWantsCloud = !inMemory && Self.userWantsCloudSync
         let model = Self.makeModel(enableUniqueConstraints: false)
         let resolvedStoreURL = NSPersistentContainer.defaultDirectoryURL()
             .appendingPathComponent("AssetLife.sqlite")
@@ -148,9 +148,19 @@ final class PersistenceController: ObservableObject {
 
     var isStoreReady: Bool { loadFailure == nil }
 
+    /// User preference for iCloud sync. Always off when hosted by XCTest:
+    /// unit tests must not touch iCloud, and unsigned CI builds lack the
+    /// CloudKit entitlement, which makes CloudKit trap at launch.
+    private static var userWantsCloudSync: Bool {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return false
+        }
+        return UserDefaults.standard.object(forKey: Constants.ICloud.cloudSyncPreferenceKey) as? Bool ?? true
+    }
+
     func retryStoreLoad() {
         guard !inMemory, let storeURL else { return }
-        let wantsCloud = UserDefaults.standard.object(forKey: Constants.ICloud.cloudSyncPreferenceKey) as? Bool ?? true
+        let wantsCloud = Self.userWantsCloudSync
         let loaded = Self.buildContainer(
             model: Self.makeModel(enableUniqueConstraints: false),
             storeURL: storeURL,

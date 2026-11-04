@@ -82,7 +82,7 @@ struct AssetListView: View {
             Group {
                 if assets.isEmpty {
                     EmptyStateView(
-                        icon: "creditcard.fill",
+                        icon: "shippingbox",
                         title: "还没有资产记录",
                         message: "先记下第一件物品，后续价值变化会自动帮你追踪",
                         buttonTitle: "马上添加"
@@ -236,6 +236,8 @@ struct AssetListView: View {
                     .background(Color.appPageBackground)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.appPageBackground.ignoresSafeArea())
             .navigationTitle("资产")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $searchText, prompt: "搜索资产")

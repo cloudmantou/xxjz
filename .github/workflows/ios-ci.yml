@@ -24,8 +24,24 @@ jobs:
       - name: Build & Test
         run: |
           set -o pipefail
+          # Pick whichever iPhone simulator the runner image ships with,
+          # instead of hard-coding a model that may not exist.
+          SIM_ID=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          for runtime in sorted(devices, reverse=True):
+              if "iOS" not in runtime:
+                  continue
+              for d in devices[runtime]:
+                  if d["name"].startswith("iPhone"):
+                      print(d["udid"]); sys.exit(0)
+          sys.exit("No available iPhone simulator found")
+          ')
+          echo "Using simulator $SIM_ID"
           xcodebuild test \
             -project AssetLife.xcodeproj \
             -scheme AssetLife \
-            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+            -destination "id=$SIM_ID" \
+            -testLanguage zh-Hans \
+            -testRegion CN \
             CODE_SIGNING_ALLOWED=NO

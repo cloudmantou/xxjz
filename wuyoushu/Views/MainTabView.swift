@@ -124,7 +124,7 @@ struct MainTabView: View {
                     activity.title = "打开我的页面"
                 }
         }
-        .tint(.warmTeal)
+        .tint(.brandPrimary500)
         .sheet(isPresented: $router.showAddAssetSheet) {
             AssetFormView(mode: assetFormMode)
                 .onChange(of: router.showAddAssetSheet) { isShowing in
@@ -148,7 +148,6 @@ private struct AssetWishTabView: View {
     @EnvironmentObject private var router: AppRouter
     @State private var selectedSection: AppRouter.AssetSection = .asset
     @State private var previousSection: AppRouter.AssetSection = .asset
-    @Namespace private var sectionToggleNamespace
 
     private var screenWidth: CGFloat {
         UIScreen.main.bounds.width
@@ -196,48 +195,18 @@ private struct AssetWishTabView: View {
     }
 
     private var sectionSelector: some View {
-        HStack(spacing: 6) {
-            sectionButton(title: "资产", section: .asset)
-            sectionButton(title: "心愿", section: .wish)
-        }
-        .padding(4)
-        .frame(height: 42)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.secondaryCardBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.borderSoft, lineWidth: 0.7)
-        )
-    }
-
-    private func sectionButton(title: String, section: AppRouter.AssetSection) -> some View {
-        let isSelected = selectedSection == section
-
-        return Button {
-            guard section != selectedSection else { return }
-            previousSection = selectedSection
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                selectedSection = section
-            }
-        } label: {
-            ZStack {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .fill(Color.warmTeal)
-                        .matchedGeometryEffect(id: "assetWishSectionBackground", in: sectionToggleNamespace)
+        DSSegmentedControl(
+            items: [AppRouter.AssetSection.asset, .wish],
+            selection: Binding(
+                get: { selectedSection },
+                set: { newValue in
+                    guard newValue != selectedSection else { return }
+                    previousSection = selectedSection
+                    selectedSection = newValue
                 }
-
-                Text(title)
-                    .font(.system(size: 15, weight: isSelected ? .semibold : .medium))
-                    .foregroundStyle(isSelected ? Color.white : Color.textSecondary)
-                    .frame(maxWidth: .infinity)
-            }
-            .frame(maxWidth: .infinity, minHeight: 34, maxHeight: 34)
-            .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-        }
-        .buttonStyle(.plain)
+            ),
+            title: { $0 == .asset ? "资产" : "心愿" }
+        )
     }
 
     private func sectionTransition(to target: AppRouter.AssetSection) -> AnyTransition {
@@ -257,83 +226,89 @@ private struct FloatingTabBar: View {
     let quickRecordPresented: Bool
     let openQuickRecord: () -> Void
 
+    @Namespace private var indicatorNamespace
+
     var body: some View {
-        let bottomPadding = max(10, safeAreaBottom)
+        let bottomPadding = max(10, safeAreaBottom - 6)
 
-        ZStack(alignment: .top) {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(Color.appCardBackground)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .stroke(Color.borderSoft, lineWidth: 1)
-                )
-                .frame(height: 72)
-                .shadow(color: Color.black.opacity(0.08), radius: 14, y: 5)
-
-            HStack(spacing: 0) {
-                regularTabButton(tab: .home)
-                regularTabButton(tab: .record)
-                centerQuickButton
-                regularTabButton(tab: .asset)
-                regularTabButton(tab: .profile)
-            }
-            .padding(.horizontal, 8)
-            .padding(.top, 8)
+        HStack(spacing: 0) {
+            regularTabButton(tab: .home)
+            regularTabButton(tab: .record)
+            centerQuickButton
+            regularTabButton(tab: .asset)
+            regularTabButton(tab: .profile)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 6)
+        .frame(height: 64)
+        .background(
+            Capsule(style: .continuous)
+                .fill(.regularMaterial)
+                .overlay(
+                    Capsule(style: .continuous)
+                        .fill(Color.appCardBackground.opacity(0.72))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(Color.borderSoft, lineWidth: 0.8)
+                )
+                .shadow(color: Color.black.opacity(0.10), radius: 18, y: 8)
+        )
+        .padding(.horizontal, 18)
         .padding(.bottom, bottomPadding)
     }
 
     private func regularTabButton(tab: Constants.Tab) -> some View {
         let isSelected = selectedTab == tab
         return Button {
-            selectedTab = tab
-        } label: {
-            VStack(spacing: 2) {
-                Image(systemName: tab.icon)
-                    .font(.system(size: 18, weight: .semibold))
-                Text(tab.title)
-                    .font(.system(size: 11, weight: .medium))
+            guard selectedTab != tab else { return }
+            Haptics.selection()
+            withAnimation(DS.Motion.snappy) {
+                selectedTab = tab
             }
-            .foregroundColor(isSelected ? .warmTeal : .textSecondary)
-            .frame(maxWidth: .infinity, minHeight: 52)
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: tab.icon)
+                    .font(.system(size: 18, weight: isSelected ? .semibold : .regular))
+                    .frame(height: 22)
+                Text(tab.title)
+                    .font(.system(size: 10.5, weight: isSelected ? .semibold : .medium, design: .rounded))
+            }
+            .foregroundColor(isSelected ? .brandPrimary500 : .textSecondary)
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+            .background {
+                if isSelected {
+                    Capsule(style: .continuous)
+                        .fill(Color.brandPrimary500.opacity(0.10))
+                        .matchedGeometryEffect(id: "tabIndicator", in: indicatorNamespace)
+                }
+            }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableButtonStyle(scale: 0.92))
+        .accessibilityLabel(tab.title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private var centerQuickButton: some View {
-        let isSelected = quickRecordPresented
-
-        return Button {
+        Button {
+            Haptics.tap()
             openQuickRecord()
         } label: {
-            VStack(spacing: 0) {
-                ZStack {
+            Image(systemName: "plus")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundColor(.white)
+                .frame(width: 52, height: 52)
+                .background(
                     Circle()
-                        .fill(Color.appCardBackground)
-                        .frame(width: 50, height: 50)
-                        .overlay(
-                            Circle()
-                                .stroke(Color.borderSoft, lineWidth: 0.8)
-                        )
-                        .shadow(color: Color.black.opacity(0.09), radius: 6, y: 2)
-
-                    Image(systemName: "pencil")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundColor(.warmTeal)
-                }
-                .offset(y: -16)
-
-                Text(Constants.Tab.quick.title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(isSelected ? .primary : .textSecondary)
-                    .padding(.top, -10)
-            }
-            .frame(maxWidth: .infinity, minHeight: 58)
-            .contentShape(Rectangle())
+                        .fill(Color.brandPrimary500)
+                        .shadow(color: Color.brandPrimary500.opacity(0.35), radius: 10, y: 4)
+                )
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableButtonStyle(scale: 0.88))
+        .accessibilityLabel(Constants.Tab.quick.title)
     }
 }
 

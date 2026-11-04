@@ -268,6 +268,8 @@ struct LineChartCard: View {
     let data: [(date: Date, value: Double)]
     var budgetLine: Double? = nil
     var cardBackgroundColor: Color = .appCardMutedBackground
+    /// 每个数据点代表一个月（坐标标签显示月份而非日期）
+    var isMonthly: Bool = false
 
     @State private var pathProgress: CGFloat = 0
     @State private var pointsAppeared: Bool = false
@@ -284,8 +286,12 @@ struct LineChartCard: View {
     }
 
     private var peakDay: (date: Date, value: Double)? {
-        data.max { $0.value < $1.value }
+        guard let peak = data.max(by: { $0.value < $1.value }), peak.value > 0 else { return nil }
+        return peak
     }
+
+    private var axisFormat: String { isMonthly ? "M月" : "dd" }
+    private var tooltipDateFormat: String { isMonthly ? "yyyy/M" : "M/dd" }
 
     private var emptyState: some View {
         Text("暂无数据")
@@ -427,7 +433,7 @@ struct LineChartCard: View {
                         let isSelected = selectedIndex == index
 
                         if isSelected {
-                            Text(item.date.formatted(as: "M/dd"))
+                            Text(item.date.formatted(as: tooltipDateFormat))
                                 .font(.system(size: 10, weight: .semibold, design: .rounded))
                                 .foregroundColor(Color.warmTeal)
                                 .padding(.horizontal, 5)
@@ -437,8 +443,8 @@ struct LineChartCard: View {
                                         .fill(Color.warmTeal.opacity(0.1))
                                 )
                                 .position(x: x, y: height + 14)
-                        } else if selectedIndex == nil && (index == 0 || index == sorted.count - 1 || item.value == peakDay?.value) {
-                            Text(item.date.formatted(as: "dd"))
+                        } else if selectedIndex == nil && (isMonthly || index == 0 || index == sorted.count - 1 || item.value == peakDay?.value) {
+                            Text(item.date.formatted(as: axisFormat))
                                 .font(.system(size: 9, design: .rounded))
                                 .foregroundColor(.secondary)
                                 .position(x: x, y: height + 12)
@@ -471,7 +477,7 @@ struct LineChartCard: View {
 
             HStack {
                 if let peak = peakDay {
-                    Label("峰值 \(peak.date.formatted(as: "MM/dd")) ¥\(Int(peak.value))", systemImage: "arrow.up")
+                    Label("峰值 \(peak.date.formatted(as: tooltipDateFormat)) ¥\(Int(peak.value))", systemImage: "arrow.up")
                         .font(.system(size: 11, design: .rounded))
                         .foregroundStyle(Color.lossRed)
                 }

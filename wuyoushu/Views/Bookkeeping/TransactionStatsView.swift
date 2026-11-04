@@ -81,7 +81,8 @@ struct TransactionStatsView: View {
                         title: "月度趋势",
                         data: viewModel.monthlyTrend.map { item in
                             (date: item.month, value: item.expense)
-                        }
+                        },
+                        isMonthly: true
                     )
                 }
             }

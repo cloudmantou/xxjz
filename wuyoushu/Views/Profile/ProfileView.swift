@@ -206,50 +206,37 @@ struct ProfileView: View {
     }
 
     private var statsGrid: some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible(), spacing: 10),
-            GridItem(.flexible(), spacing: 10)
-        ], spacing: 10) {
-            StatCard(
-                title: "资产总数",
-                value: "\(assets.count)",
-                icon: "creditcard.fill"
-            )
-
-            StatCard(
-                title: "使用中",
-                value: "\(activeAssetCount)",
-                icon: "checkmark.circle.fill",
-                iconColor: .profitGreen
-            )
-
-            StatCard(
-                title: "已卖出",
-                value: "\(soldAssetCount)",
-                icon: "tag.fill",
-                iconColor: .warmTeal
-            )
-
-            StatCard(
-                title: "心愿清单",
-                value: "\(wishCount)",
-                icon: "heart.fill",
-                iconColor: .warmCoral
-            )
-
-            StatCard(
-                title: "记账笔数",
-                value: "\(transactions.count)",
-                icon: "number.square.fill"
-            )
-
-            StatCard(
-                title: "附加成本",
-                value: totalExtraCost.compactCurrencyString,
-                icon: "minus.circle.fill",
-                iconColor: .warmCoral
-            )
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 3), spacing: DS.Space.m) {
+            compactStat(title: "资产总数", value: "\(assets.count)", icon: "shippingbox.fill", color: .brandPrimary500)
+            compactStat(title: "使用中", value: "\(activeAssetCount)", icon: "checkmark.circle.fill", color: .profitGreen)
+            compactStat(title: "已卖出", value: "\(soldAssetCount)", icon: "tag.fill", color: .warningOrange)
+            compactStat(title: "心愿清单", value: "\(wishCount)", icon: "heart.fill", color: .warmCoral)
+            compactStat(title: "记账笔数", value: "\(transactions.count)", icon: "number", color: .neutralBlue)
+            compactStat(title: "附加成本", value: totalExtraCost.compactCurrencyString, icon: "minus.circle.fill", color: .warmCoral)
         }
+        .padding(.vertical, DS.Space.m)
+        .padding(.horizontal, DS.Space.xs)
+        .cardStyle(variant: .default, radius: CardRadius.large)
+    }
+
+    private func compactStat(title: String, value: String, icon: String, color: Color) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(color)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(color.opacity(0.12)))
+            Text(value)
+                .font(.dsAmount(18))
+                .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(title)
+                .font(.dsCaption)
+                .foregroundStyle(Color.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
     }
 
     private var assetOverviewCard: some View {

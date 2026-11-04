@@ -38,7 +38,6 @@ struct StatisticsHomeView: View {
     @State private var selectedSection: StatisticsSection = .trend
     @State private var previousSection: StatisticsSection = .trend
     @State private var selectedRankType: StatisticsRankType = .expense
-    @Namespace private var selectorNamespace
 
     private var screenWidth: CGFloat {
         UIScreen.main.bounds.width
@@ -54,10 +53,6 @@ struct StatisticsHomeView: View {
 
     private var isLegacyCompactLayout: Bool {
         Constants.Layout.bucket(for: screenWidth) == .legacyCompact
-    }
-
-    private var heroCardMinHeight: CGFloat {
-        Constants.Layout.heroCardMinHeight(for: screenWidth)
     }
 
     private var chartLegendMinWidth: CGFloat {
@@ -196,182 +191,86 @@ struct StatisticsHomeView: View {
     // MARK: - 月份导航 + 快速统计合并头部
 
     private var monthNavigatorWithSummary: some View {
-        VStack(spacing: 0) {
-            // ── 渐变 Hero 卡 ──
-            ZStack {
-                // 背景渐变
-                RoundedRectangle(cornerRadius: CardRadius.large, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.heroGradientTop, Color.heroGradientBottom],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+        VStack(alignment: .leading, spacing: DS.Space.m) {
+            HStack(spacing: DS.Space.s) {
+                DSIconButton(systemName: "chevron.left", size: 32) { changeMonth(-1) }
 
-                VStack(spacing: 14) {
-                    // 月份导航行
-                    HStack(spacing: 0) {
-                        Button(action: { changeMonth(-1) }) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundColor(.white.opacity(0.9))
-                                .frame(width: 36, height: 36)
-                                .background(Color.white.opacity(0.18))
-                                .clipShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-
-                        Spacer()
-
-                        VStack(spacing: 3) {
-                            Text(viewModel.selectedMonth.monthYearString)
-                                .font(.system(size: 18, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                            Text("\(viewModel.transactionCount) 笔记录")
-                                .font(.system(size: 11, weight: .medium, design: .rounded))
-                                .foregroundColor(.white.opacity(0.72))
-                        }
-
-                        Spacer()
-
-                        Button(action: { changeMonth(1) }) {
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundColor(.white.opacity(0.9))
-                                .frame(width: 36, height: 36)
-                                .background(Color.white.opacity(0.18))
-                                .clipShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    // 三栏数字摘要
-                    HStack(spacing: 0) {
-                        heroMetric(
-                            title: "支出",
-                            value: viewModel.monthlyExpense,
-                            icon: "arrow.down.circle.fill",
-                            isExpense: true
-                        )
-
-                        Rectangle()
-                            .fill(Color.white.opacity(0.22))
-                            .frame(width: 0.5)
-                            .frame(height: 44)
-
-                        heroMetric(
-                            title: "收入",
-                            value: viewModel.monthlyIncome,
-                            icon: "arrow.up.circle.fill",
-                            isIncome: true
-                        )
-
-                        Rectangle()
-                            .fill(Color.white.opacity(0.22))
-                            .frame(width: 0.5)
-                            .frame(height: 44)
-
-                        heroMetricNet(
-                            title: "结余",
-                            value: viewModel.monthlyNet
-                        )
-                    }
-                    .padding(.bottom, 4)
+                VStack(spacing: 2) {
+                    Text(viewModel.selectedMonth.monthYearString)
+                        .font(.dsHeadline)
+                        .foregroundStyle(Color.textPrimary)
+                    Text("\(viewModel.transactionCount) 笔记录")
+                        .font(.dsCaption)
+                        .foregroundStyle(Color.textTertiary)
                 }
-                .padding(.horizontal, pageHorizontalPadding)
-                .padding(.vertical, 16)
+                .frame(maxWidth: .infinity)
+
+                DSIconButton(systemName: "chevron.right", size: 32) { changeMonth(1) }
             }
-            .frame(minHeight: heroCardMinHeight)
+
+            VStack(alignment: .leading, spacing: 4) {
+                DSOverline(text: "本月支出")
+                CountingCurrencyText(
+                    value: viewModel.monthlyExpense,
+                    font: .dsAmount(34),
+                    color: .textPrimary
+                )
+            }
+
+            HStack(spacing: 0) {
+                summaryColumn(title: "收入", value: viewModel.monthlyIncome, color: .incomeGreen)
+                Rectangle()
+                    .fill(Color.borderSoft)
+                    .frame(width: 1, height: 30)
+                    .padding(.horizontal, DS.Space.m)
+                summaryColumn(
+                    title: "结余",
+                    value: viewModel.monthlyNet,
+                    color: viewModel.monthlyNet >= 0 ? .textPrimary : .expenseRed
+                )
+                Rectangle()
+                    .fill(Color.borderSoft)
+                    .frame(width: 1, height: 30)
+                    .padding(.horizontal, DS.Space.m)
+                summaryColumn(title: "日均", value: averageDailyExpense, color: .textPrimary)
+            }
         }
+        .padding(DS.Space.m)
+        .cardStyle(variant: .default, radius: CardRadius.large)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 24)
+                .onEnded { value in
+                    guard abs(value.translation.width) > abs(value.translation.height),
+                          abs(value.translation.width) > 50 else { return }
+                    changeMonth(value.translation.width < 0 ? 1 : -1)
+                }
+        )
     }
 
-    private func heroMetric(title: String, value: Double, icon: String,
-                            isExpense: Bool = false, isIncome: Bool = false) -> some View {
-        VStack(spacing: 5) {
-            HStack(spacing: 3) {
-                Image(systemName: icon)
-                    .font(.system(size: 10))
-                    .foregroundColor(.white.opacity(0.7))
-                Text(title)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundColor(.white.opacity(0.7))
-            }
-            AnimatedCurrencyText(
-                value: value,
-                color: isExpense ? Color(hex: "FFD8D8") : (isIncome ? Color(hex: "D7F4E1") : .white)
-            )
+    private func summaryColumn(title: String, value: Double, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.dsCaption)
+                .foregroundStyle(Color.textSecondary)
+            CountingCurrencyText(value: value, font: .dsAmount(15, weight: .semibold), color: color, compact: true)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func heroMetricNet(title: String, value: Double) -> some View {
-        VStack(spacing: 5) {
-            HStack(spacing: 3) {
-                Image(systemName: "equal.circle.fill")
-                    .font(.system(size: 10))
-                    .foregroundColor(.white.opacity(0.7))
-                Text(title)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundColor(.white.opacity(0.7))
-            }
-            AnimatedCurrencyText(
-                value: value,
-                color: value >= 0 ? Color(hex: "D7F4E1") : Color(hex: "FFD8D8")
-            )
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private func animatedSummaryMetric(title: String, value: Double, color: Color, icon: String) -> some View {
-        VStack(spacing: 4) {
-            HStack(spacing: 3) {
-                Image(systemName: icon)
-                    .font(.system(size: 10))
-                    .foregroundColor(color.opacity(0.7))
-                Text(title)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundColor(.secondary)
-            }
-            AnimatedCurrencyText(value: value, color: color)
-        }
-    }
-
-    // MARK: - 流畅滑块选择器（matchedGeometryEffect）
+    // MARK: - 分段选择器
 
     private var smoothSectionSelector: some View {
-        HStack(spacing: 0) {
-            ForEach(StatisticsSection.allCases) { section in
-                Button {
-                    let wasSection = selectedSection
-                    previousSection = wasSection
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                        selectedSection = section
-                    }
-                } label: {
-                    ZStack {
-                        if selectedSection == section {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color.warmTeal)
-                                .matchedGeometryEffect(id: "selectorBackground", in: selectorNamespace)
-                                .shadow(color: Color.warmTeal.opacity(0.18), radius: 10, y: 4)
-                        }
-
-                        Text(section.rawValue)
-                            .font(.system(size: 13, weight: selectedSection == section ? .semibold : .regular, design: .rounded))
-                            .foregroundColor(selectedSection == section ? .white : .textSecondary)
-                            .scaleEffect(selectedSection == section ? 1.02 : 1.0)
-                            .padding(.vertical, 9)
-                            .frame(maxWidth: .infinity)
-                    }
+        DSSegmentedControl(
+            items: StatisticsSection.allCases,
+            selection: Binding(
+                get: { selectedSection },
+                set: { newValue in
+                    previousSection = selectedSection
+                    selectedSection = newValue
                 }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(3)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.statisticsCardBackground)
+            ),
+            title: { $0.rawValue }
         )
     }
 
@@ -414,9 +313,7 @@ struct StatisticsHomeView: View {
                 }
                 .padding(Constants.UI.cardPadding)
                 .frame(minHeight: isLegacyCompactLayout ? 244 : 198, alignment: .top)
-                .background(Color.statisticsCardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .shadow(color: .black.opacity(0.04), radius: 6, y: 2)
+                .cardStyle()
             }
 
             if !dailySpendingData.isEmpty {
@@ -434,7 +331,8 @@ struct StatisticsHomeView: View {
                     data: viewModel.monthlyTrend.map { item in
                         (date: item.month, value: item.expense)
                     },
-                    cardBackgroundColor: .statisticsCardBackground
+                    cardBackgroundColor: .statisticsCardBackground,
+                    isMonthly: true
                 )
             }
 
@@ -538,9 +436,7 @@ struct StatisticsHomeView: View {
                     }
                 }
                 .padding(14)
-                .background(Color.statisticsCardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .shadow(color: .black.opacity(0.04), radius: 6, y: 2)
+                .cardStyle()
             }
 
             if !topTransactions.isEmpty {
@@ -579,9 +475,7 @@ struct StatisticsHomeView: View {
                     }
                 }
                 .padding(14)
-                .background(Color.statisticsCardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .shadow(color: .black.opacity(0.04), radius: 6, y: 2)
+                .cardStyle()
             }
         }
     }
@@ -665,9 +559,7 @@ struct StatisticsHomeView: View {
                 }
             }
             .padding(14)
-            .background(Color.statisticsCardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .shadow(color: .black.opacity(0.04), radius: 6, y: 2)
+            .cardStyle()
 
             HStack(spacing: 10) {
                 calendarSummaryBadge(
@@ -748,14 +640,14 @@ struct StatisticsHomeView: View {
             .foregroundColor(.secondary)
             .frame(maxWidth: .infinity, minHeight: 100)
             .padding(.horizontal, 12)
-            .background(Color.statisticsCardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .cardStyle()
     }
 
     private func changeMonth(_ offset: Int) {
         let calendar = Calendar.current
         if let newMonth = calendar.date(byAdding: .month, value: offset, to: viewModel.selectedMonth) {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            Haptics.soft()
+            withAnimation(DS.Motion.snappy) {
                 viewModel.selectedMonth = newMonth
             }
         }
@@ -764,33 +656,6 @@ struct StatisticsHomeView: View {
     private func reloadStatistics() {
         viewModel.loadStatistics(from: viewContext)
         viewModel.loadBudget(from: viewContext)
-    }
-}
-
-// MARK: - AnimatedCurrencyText（数字动画）
-
-private struct AnimatedCurrencyText: View {
-    let value: Double
-    let color: Color
-
-    @State private var displayValue: Double = 0
-
-    var body: some View {
-        Text(displayValue.compactCurrencyString)
-            .font(.system(size: 14, weight: .bold, design: .rounded))
-            .foregroundColor(color)
-            .lineLimit(1)
-            .minimumScaleFactor(0.75)
-            .onAppear {
-                withAnimation(.easeOut(duration: 0.55)) {
-                    displayValue = value
-                }
-            }
-            .onChange(of: value) { newValue in
-                withAnimation(.easeOut(duration: 0.45)) {
-                    displayValue = newValue
-                }
-            }
     }
 }
 

@@ -83,7 +83,7 @@ struct WishlistView: View {
             Group {
                 if items.isEmpty {
                     EmptyStateView(
-                        icon: "heart.fill",
+                        icon: "heart",
                         title: "心愿清单还是空的",
                         message: "先把喜欢的东西放进来，降价到位时就不会错过",
                         buttonTitle: "新建心愿"
@@ -137,6 +137,8 @@ struct WishlistView: View {
                     .background(Color.appPageBackground)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.appPageBackground.ignoresSafeArea())
             .navigationTitle("心愿清单")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $searchText, prompt: "搜索心愿")

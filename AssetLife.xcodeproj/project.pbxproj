@@ -112,6 +112,7 @@
 		D848271AA05A98F9F44B3398 /* SQLite in Frameworks */ = {isa = PBXBuildFile; productRef = 327E1329CE27FC9FCDA319B5 /* SQLite */; };
 		DD9A12DF130BADD78A43AADB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 157AE21B915DC14EB2EFCAA2 /* Assets.xcassets */; };
 		E0AD2F65DEE56DFED6413764 /* View+CardStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA088BD6C5F2BAEF057064BF /* View+CardStyle.swift */; };
+		D5A1C0DE0000000000000002 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A1C0DE0000000000000001 /* DesignSystem.swift */; };
 		E0B4F66528C394399BB06EDB /* AssetImportExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97498CCB0AADFE4E4C22560D /* AssetImportExportView.swift */; };
 		E3A49C62D41D34448720242E /* KeywordRulesTable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54E96300282F5564E6DCBF9C /* KeywordRulesTable.swift */; };
 		E4AD627862D849093C04178E /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 433A0323E7FFDBB5DAAADD56 /* WidgetKit.framework */; };
@@ -277,6 +278,7 @@
 		C3BEBC391F36B10563EB915F /* BookkeepingModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookkeepingModelTests.swift; sourceTree = "<group>"; };
 		C3DE59289A392C3DBBC000CD /* WishlistDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WishlistDetailView.swift; sourceTree = "<group>"; };
 		C56FB8597F6B4A767D3BC086 /* BudgetProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BudgetProgressView.swift; sourceTree = "<group>"; };
+		D5A1C0DE0000000000000001 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		CA088BD6C5F2BAEF057064BF /* View+CardStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "View+CardStyle.swift"; sourceTree = "<group>"; };
 		CA23D6DF463C073CBCBF89AA /* WishCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WishCard.swift; sourceTree = "<group>"; };
 		CB7E3E989562725FD27454FC /* wuyoushuApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = wuyoushuApp.swift; sourceTree = "<group>"; };
@@ -513,6 +515,7 @@
 				1891BACBFFA45284FB9EC5E4 /* Color+Theme.swift */,
 				705E4E672F6AB11D3D4C83F8 /* Date+Extensions.swift */,
 				E03A9FAD3A5C97C6C2177AB7 /* Double+Currency.swift */,
+				D5A1C0DE0000000000000001 /* DesignSystem.swift */,
 				CA088BD6C5F2BAEF057064BF /* View+CardStyle.swift */,
 			);
 			path = Extensions;
@@ -911,6 +914,7 @@
 				83EC2C397FACB39FCA17C9A4 /* TransactionListView.swift in Sources */,
 				267B7F0B21DD8B819701E3D9 /* TransactionParserService.swift in Sources */,
 				D625EAEDF9F616DB7788F2F2 /* TransactionStatsView.swift in Sources */,
+				D5A1C0DE0000000000000002 /* DesignSystem.swift in Sources */,
 				E0AD2F65DEE56DFED6413764 /* View+CardStyle.swift in Sources */,
 				0D8C7DBDB532E39A8057AA90 /* WechatTransactionParser.swift in Sources */,
 				130DFD467395B8C8C8F7D60D /* WishCard.swift in Sources */,
