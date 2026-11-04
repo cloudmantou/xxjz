@@ -16,21 +16,21 @@ extension Color {
     static let secondaryPurple = Color(hex: "5856D6")
 
     // MARK: - Semantic Colors
-    static let profitGreen = adaptive(light: "58B67A", dark: "69C88A")
-    static let warningOrange = adaptive(light: "E6B85C", dark: "E2B865")
-    static let lossRed = adaptive(light: "E97777", dark: "F08A8A")
+    static let profitGreen = adaptive(light: "2F9E6B", dark: "4CC38A")
+    static let warningOrange = adaptive(light: "D9A030", dark: "E8B44E")
+    static let lossRed = adaptive(light: "D9534F", dark: "F07A73")
 
     // MARK: - Text Colors
-    static let textPrimary = adaptive(light: "161616", dark: "F2F4EF")
+    static let textPrimary = adaptive(light: "1C1C1A", dark: "F1F1EC")
     static let textSecondary = Color(UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(Color(hex: "A7AEA5"))
-            : UIColor(Color(hex: "6F736C"))
+            ? UIColor(Color(hex: "A3A69F"))
+            : UIColor(Color(hex: "6B6A63"))
     })
     static let textTertiary = Color(UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(Color(hex: "7E857D"))
-            : UIColor(Color(hex: "A2A79F"))
+            ? UIColor(Color(hex: "6F736D"))
+            : UIColor(Color(hex: "A3A199"))
     })
     static let textOnPrimary = Color.white
 
@@ -39,24 +39,24 @@ extension Color {
     static let secondaryCardBackground = Color.appCardMutedBackground
 
     // MARK: - Brand / Theme Tokens
-    static let brandPrimary400 = adaptive(light: "6AC8C0", dark: "74D3CB")
-    static let brandPrimary500 = adaptive(light: "4CB7AE", dark: "58C1B8")
-    static let brandPrimary600 = adaptive(light: "3AA79D", dark: "43AEA5")
+    static let brandPrimary400 = adaptive(light: "3FA68A", dark: "5CC4A6")
+    static let brandPrimary500 = adaptive(light: "1F8A70", dark: "3DB491")
+    static let brandPrimary600 = adaptive(light: "17705B", dark: "2E9C7C")
 
-    static let backgroundBase = adaptive(light: "F7F7F3", dark: "111513")
-    static let backgroundSecondary = adaptive(light: "F1F2EC", dark: "171C19")
-    static let backgroundTinted = adaptive(light: "EEF6F4", dark: "15201D")
+    static let backgroundBase = adaptive(light: "F5F4EF", dark: "0F1110")
+    static let backgroundSecondary = adaptive(light: "EDECE6", dark: "1C1F1D")
+    static let backgroundTinted = adaptive(light: "E6F1EC", dark: "14211D")
 
-    static let cardBase = adaptive(light: "FBFAF4", dark: "1B211E")
-    static let cardElevated = adaptive(light: "FFFFFF", dark: "222925")
+    static let cardBase = adaptive(light: "FFFFFF", dark: "181B19")
+    static let cardElevated = adaptive(light: "FFFFFF", dark: "232724")
 
-    static let borderSoft = adaptive(light: "E7E8E1", dark: "2A312D")
-    static let borderMedium = adaptive(light: "D9DDD4", dark: "323A35")
+    static let borderSoft = adaptive(light: "E8E6DE", dark: "262A27")
+    static let borderMedium = adaptive(light: "D8D6CC", dark: "323733")
 
-    static let semanticSuccess = adaptive(light: "58B67A", dark: "69C88A")
-    static let semanticWarning = adaptive(light: "E6B85C", dark: "E2B865")
-    static let semanticDanger = adaptive(light: "E97777", dark: "F08A8A")
-    static let semanticInfo = adaptive(light: "6DA9E4", dark: "7DB7F0")
+    static let semanticSuccess = adaptive(light: "2F9E6B", dark: "4CC38A")
+    static let semanticWarning = adaptive(light: "D9A030", dark: "E8B44E")
+    static let semanticDanger = adaptive(light: "D9534F", dark: "F07A73")
+    static let semanticInfo = adaptive(light: "4A86D9", dark: "6FA3EE")
 
     // MARK: - Bookkeeping Warm Theme (兼容旧命名)
     static let warmTeal = brandPrimary500
@@ -64,8 +64,8 @@ extension Color {
     static let warmTealLight = backgroundTinted
     static let warmYellow = semanticWarning
     static let warmYellowDark = adaptive(light: "D6A94F", dark: "C89E4B")
-    static let warmMint = adaptive(light: "F1FAF8", dark: "1A2623")
-    static let warmMintDark = adaptive(light: "CDEFEA", dark: "236F69")
+    static let warmMint = adaptive(light: "EEF6F2", dark: "17231F")
+    static let warmMintDark = adaptive(light: "CBE6DB", dark: "1F5E4E")
     static let warmCoral = semanticDanger
 
     // MARK: - Pastel Category Backgrounds (暗/亮自适应)
@@ -91,11 +91,11 @@ extension Color {
     }
 
     // MARK: - Hero Gradient Colors
-    static let heroGradientTop = adaptive(light: "67D6CD", dark: "2D8E87")
-    static let heroGradientBottom = adaptive(light: "43B7AF", dark: "236F69")
+    static let heroGradientTop = adaptive(light: "23977B", dark: "1E6B59")
+    static let heroGradientBottom = adaptive(light: "17705B", dark: "154A3E")
     static let heroSurface = brandPrimary500
-    static let homeHeroGradientTop = adaptive(light: "67D6CD", dark: "2D8E87")
-    static let homeHeroGradientBottom = adaptive(light: "43B7AF", dark: "236F69")
+    static let homeHeroGradientTop = adaptive(light: "23977B", dark: "1E6B59")
+    static let homeHeroGradientBottom = adaptive(light: "17705B", dark: "154A3E")
 
     // MARK: - App Surface Colors
     static let appPageBackground = backgroundBase
@@ -116,14 +116,14 @@ extension Color {
 
     // MARK: - Chart Colors (low saturation)
     static let chartColors: [Color] = [
-        Color(hex: "49B6AE"),
-        Color(hex: "F0C96A"),
-        Color(hex: "EE8D8D"),
-        Color(hex: "67A9E6"),
-        Color(hex: "AF7CE1"),
-        Color(hex: "7BC47F"),
-        Color(hex: "8EC3B0"),
-        Color(hex: "C9C3B8")
+        Color(hex: "1F8A70"),
+        Color(hex: "E3A33B"),
+        Color(hex: "D96C5F"),
+        Color(hex: "4A86D9"),
+        Color(hex: "8E6CC9"),
+        Color(hex: "6BB27A"),
+        Color(hex: "5FA9A6"),
+        Color(hex: "B8B2A6")
     ]
 
     static func chartColor(at index: Int) -> Color {

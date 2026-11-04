@@ -3,8 +3,8 @@ import SwiftUI
 // MARK: - Card Radius Tokens
 enum CardRadius {
     static let small: CGFloat = 12
-    static let medium: CGFloat = 16
-    static let large: CGFloat = 20
+    static let medium: CGFloat = 18
+    static let large: CGFloat = 22
     static let hero: CGFloat = 24
 }
 
@@ -33,17 +33,17 @@ extension View {
         switch variant {
         case .default:
             fill = AnyShapeStyle(Color.appCardBackground)
-            shadowOpacity = 0.06
-            shadowRadius = 18
-            shadowYOffset = 6
+            shadowOpacity = 0.035
+            shadowRadius = 10
+            shadowYOffset = 3
             borderColor = .borderSoft
             borderWidth = 0.8
         case .elevated:
             fill = AnyShapeStyle(Color.surfaceElevated)
-            shadowOpacity = 0.12
-            shadowRadius = 32
-            shadowYOffset = 10
-            borderColor = .borderMedium
+            shadowOpacity = 0.08
+            shadowRadius = 20
+            shadowYOffset = 8
+            borderColor = .borderSoft
             borderWidth = 0.9
         case .flat:
             fill = AnyShapeStyle(Color.appCardMutedBackground)
@@ -53,10 +53,10 @@ extension View {
             borderColor = .borderSoft
             borderWidth = 0.8
         case .tinted(let color):
-            fill = AnyShapeStyle(color.opacity(0.12))
-            shadowOpacity = 0.06
-            shadowRadius = 18
-            shadowYOffset = 6
+            fill = AnyShapeStyle(color.opacity(0.10))
+            shadowOpacity = 0
+            shadowRadius = 0
+            shadowYOffset = 0
             borderColor = color.opacity(0.22)
             borderWidth = 0.8
         }

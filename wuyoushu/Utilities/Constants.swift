@@ -199,10 +199,10 @@ enum Constants {
         var icon: String {
             switch self {
             case .home: return "house.fill"
-            case .record: return "chart.bar.xaxis"
+            case .record: return "chart.pie.fill"
             case .quick: return "pencil.circle.fill"
-            case .asset: return "creditcard.fill"
-            case .profile: return "person.fill"
+            case .asset: return "shippingbox.fill"
+            case .profile: return "person.crop.circle.fill"
             }
         }
     }

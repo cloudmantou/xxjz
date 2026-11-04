@@ -15,6 +15,7 @@ struct DashboardView: View {
     @State private var pendingDeleteTransaction: BookkeepingTransaction?
     @State private var showDeleteConfirm = false
     @State private var saveErrorMessage: String?
+    @Namespace private var dayNamespace
 
     private var screenWidth: CGFloat {
         UIScreen.main.bounds.width
@@ -132,103 +133,179 @@ struct DashboardView: View {
 
     // MARK: - Background
     private var heroBackground: some View {
-        ZStack(alignment: .top) {
-            Color.appPageBackground
-
-            LinearGradient(
-                colors: [Color.homeHeroGradientTop, Color.homeHeroGradientBottom],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .frame(height: 290)
-            .overlay(
-                LinearGradient(
-                    colors: [Color.clear, Color.appPageBackground],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-        }
+        Color.appPageBackground
     }
 
-    // MARK: - Hero Section（重设计版）
+    // MARK: - Header
     private var topHeroSection: some View {
-        VStack(spacing: 0) {
-            // ── 顶部：账本标题 + 日期导航 ──
-            HStack(alignment: .center) {
-                // 左：账本名 + 切换
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 5) {
-                        Text("默认账本")
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Color.white.opacity(0.82))
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(Color.white.opacity(0.6))
-                    }
+        VStack(alignment: .leading, spacing: DS.Space.s) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(headerOverline)
+                        .font(.dsOverline)
+                        .foregroundStyle(Color.textTertiary)
                     Text(router.isViewingToday ? "今天" : router.selectedReceiptDate.formatted(as: "M月d日"))
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.white)
+                        .font(.dsLargeTitle)
+                        .foregroundStyle(Color.textPrimary)
                 }
 
                 Spacer()
 
-                // 右：日期导航器
-                homeDateNavigator
-            }
-            .padding(.horizontal, pageHorizontalPadding)
-            .padding(.top, 12)
-            .padding(.bottom, 10)
-        }
-    }
+                HStack(spacing: DS.Space.xs) {
+                    if !router.isViewingToday {
+                        Button {
+                            Haptics.selection()
+                            withAnimation(DS.Motion.snappy) { router.goToToday() }
+                        } label: {
+                            Text("回到今天")
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Color.brandPrimary500)
+                                .padding(.horizontal, 12)
+                                .frame(height: 34)
+                                .background(Capsule().fill(Color.brandPrimary500.opacity(0.12)))
+                        }
+                        .buttonStyle(.pressable)
+                        .transition(.scale(scale: 0.8).combined(with: .opacity))
+                    }
 
-    // MARK: - Date Navigator
-    private var homeDateNavigator: some View {
-        HStack(spacing: 6) {
-            Button(action: { router.goToPreviousDay() }) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color.white.opacity(0.9))
-                    .frame(width: 30, height: 30)
-                    .background(Color.white.opacity(0.18))
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-
-            Button(action: { showDatePicker = true }) {
-                VStack(spacing: 1) {
-                    Text(router.selectedReceiptDate.formatted(as: "dd"))
-                        .font(.system(size: 18, weight: .black, design: .rounded))
-                        .foregroundStyle(Color.white)
-                    Text(router.selectedReceiptDate.formatted(as: "MM.dd"))
-                        .font(.system(size: 9, weight: .medium, design: .rounded))
-                        .foregroundStyle(Color.white.opacity(0.75))
+                    DSIconButton(systemName: "calendar", size: 36) {
+                        showDatePicker = true
+                    }
                 }
-                .frame(width: 42, height: 44)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.2))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(Color.white.opacity(0.35), lineWidth: 0.5)
-                        )
-                )
             }
-            .buttonStyle(.plain)
 
-            Button(action: { router.goToNextDay() }) {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color.white.opacity(0.9))
-                    .frame(width: 30, height: 30)
-                    .background(Color.white.opacity(0.18))
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
+            weekStrip
+
+            daySummary
         }
-        .shadow(color: Color.black.opacity(0.1), radius: 4, y: 2)
+        .padding(.horizontal, pageHorizontalPadding)
+        .padding(.top, DS.Space.xs)
+        .padding(.bottom, DS.Space.s)
+        .animation(DS.Motion.snappy, value: router.isViewingToday)
     }
 
+    private var headerOverline: String {
+        let weekday = router.selectedReceiptDate.formatted(as: "EEEE")
+        return "默认账本 · \(weekday)"
+    }
+
+    // MARK: - Week Strip
+
+    private var weekDays: [Date] {
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2
+        let selected = router.selectedReceiptDate.startOfDay
+        let weekday = calendar.component(.weekday, from: selected)
+        let offset = (weekday - calendar.firstWeekday + 7) % 7
+        guard let monday = calendar.date(byAdding: .day, value: -offset, to: selected) else { return [selected] }
+        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: monday) }
+    }
+
+    private var weekStrip: some View {
+        HStack(spacing: 4) {
+            ForEach(weekDays, id: \.self) { day in
+                dayCell(day)
+            }
+        }
+        .padding(4)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color.appCardBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color.borderSoft, lineWidth: 0.8)
+                )
+        )
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 24)
+                .onEnded { value in
+                    guard abs(value.translation.width) > abs(value.translation.height),
+                          abs(value.translation.width) > 40 else { return }
+                    shiftWeek(value.translation.width < 0 ? 1 : -1)
+                }
+        )
+    }
+
+    private func dayCell(_ day: Date) -> some View {
+        let calendar = Calendar.current
+        let isSelected = calendar.isDate(day, inSameDayAs: router.selectedReceiptDate)
+        let isToday = calendar.isDateInToday(day)
+        let isFuture = day.startOfDay > Date().startOfDay
+
+        return Button {
+            guard !isSelected else { return }
+            Haptics.selection()
+            withAnimation(DS.Motion.snappy) {
+                router.selectedReceiptDate = day
+            }
+        } label: {
+            VStack(spacing: 4) {
+                Text(day.formatted(as: "EEEEE"))
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(isSelected ? Color.white.opacity(0.8) : Color.textTertiary)
+                Text(day.formatted(as: "d"))
+                    .font(.dsAmount(16, weight: isSelected ? .bold : .semibold))
+                    .foregroundStyle(isSelected ? Color.white : (isFuture ? Color.textTertiary : Color.textPrimary))
+                Circle()
+                    .fill(isSelected ? Color.white : Color.brandPrimary500)
+                    .frame(width: 4, height: 4)
+                    .opacity(isToday ? 1 : 0)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.brandPrimary500)
+                        .matchedGeometryEffect(id: "selectedDay", in: dayNamespace)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableButtonStyle(scale: 0.92))
+        .accessibilityLabel(day.formatted(as: "M月d日 EEEE"))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func shiftWeek(_ direction: Int) {
+        guard let target = Calendar.current.date(byAdding: .day, value: 7 * direction, to: router.selectedReceiptDate) else { return }
+        Haptics.soft()
+        withAnimation(DS.Motion.smooth) {
+            router.selectedReceiptDate = target
+        }
+    }
+
+    // MARK: - Day Summary
+
+    private var daySummary: some View {
+        HStack(spacing: 0) {
+            summaryItem(title: "支出", value: dayExpense, color: .textPrimary)
+            Rectangle()
+                .fill(Color.borderSoft)
+                .frame(width: 1, height: 28)
+            summaryItem(title: "收入", value: dayIncome, color: .incomeGreen)
+            Rectangle()
+                .fill(Color.borderSoft)
+                .frame(width: 1, height: 28)
+            summaryItem(title: "笔数", text: "\(allDayTransactions.count)", color: .textPrimary)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func summaryItem(title: String, value: Double? = nil, text: String? = nil, color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(title)
+                .font(.dsCaption)
+                .foregroundStyle(Color.textSecondary)
+            Text(text ?? String(format: "¥%.2f", value ?? 0))
+                .font(.dsAmount(17, weight: .semibold))
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+        }
+        .frame(maxWidth: .infinity)
+    }
 }
 
 // MARK: - Date Picker Sheet
@@ -246,21 +323,16 @@ private struct DatePickerSheet: View {
                     displayedComponents: .date
                 )
                 .datePickerStyle(.graphical)
-                .tint(.warmTeal)
+                .tint(.brandPrimary500)
                 .padding(.horizontal, 8)
 
-                Button(action: { selectedDate = Date() }) {
+                Button {
+                    Haptics.selection()
+                    selectedDate = Date()
+                } label: {
                     Text("回到今天")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
-                        .background(
-                            LinearGradient(colors: [Color.heroGradientTop, Color.heroGradientBottom],
-                                           startPoint: .leading, endPoint: .trailing)
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: CardRadius.medium, style: .continuous))
                 }
+                .buttonStyle(PrimaryButtonStyle())
                 .padding(.horizontal, 20)
 
                 Spacer()
@@ -271,7 +343,7 @@ private struct DatePickerSheet: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("完成") { dismiss() }
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.warmTeal)
+                        .foregroundColor(.brandPrimary500)
                 }
             }
         }

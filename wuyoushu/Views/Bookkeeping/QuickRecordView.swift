@@ -95,14 +95,6 @@ struct QuickRecordView: View {
         sanitizedDimension(Constants.Layout.typeToggleHeight(for: screenWidth), fallback: 40, lower: 32, upper: 56)
     }
 
-    private var typeToggleCornerRadius: CGFloat {
-        sanitizedDimension(layoutBucket == .legacyCompact ? 10 : 11, fallback: 10, lower: 8, upper: 16)
-    }
-
-    private var typeToggleFontSize: CGFloat {
-        layoutBucket == .legacyCompact ? 11 : 12
-    }
-
     private var categoryEmojiFontSize: CGFloat {
         switch layoutBucket {
         case .legacyCompact: return 22
@@ -118,14 +110,6 @@ struct QuickRecordView: View {
 
     private var keypadNumberTextColor: Color {
         Color.primary
-    }
-
-    private var keypadSecondaryTextColor: Color {
-        Color.secondary
-    }
-
-    private var keypadOperatorTextColor: Color {
-        Color(hex: "#4cb7ae")
     }
 
     private var displayAmount: String {
@@ -285,50 +269,25 @@ struct QuickRecordView: View {
 
     // MARK: - Type Toggle (支出 / 收入 / 转账)
 
-    @Namespace private var typeToggleNamespace
-
     private var typeToggleSection: some View {
-        HStack(spacing: 0) {
-            typeButton(title: "支出", type: .expense)
-            typeButton(title: "收入", type: .income)
-            typeButton(title: "转账", type: .transfer)
-        }
-        .frame(height: typeToggleHeight)
-        .padding(2)
-        .background(
-            RoundedRectangle(cornerRadius: typeToggleCornerRadius, style: .continuous)
-                .fill(Color.appCardMutedBackground)
-                .overlay(
-                    RoundedRectangle(cornerRadius: typeToggleCornerRadius, style: .continuous)
-                        .stroke(Color.borderSoft, lineWidth: 0.8)
-                )
-        )
-    }
-
-    private func typeButton(title: String, type: TransactionType) -> some View {
-        let isSelected = transactionType == type
-        return Button(action: {
-            isNoteFocused = false
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                transactionType = type
-            }
-        }) {
-            ZStack {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: max(typeToggleCornerRadius - 2, 8), style: .continuous)
-                        .fill(Color.warmTeal)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: max(typeToggleCornerRadius - 2, 8), style: .continuous)
-                                .stroke(Color.warmTeal.opacity(0.35), lineWidth: 1)
-                        )
-                        .matchedGeometryEffect(id: "typeToggle", in: typeToggleNamespace)
+        DSSegmentedControl(
+            items: [TransactionType.expense, .income, .transfer],
+            selection: Binding(
+                get: { transactionType },
+                set: { newValue in
+                    isNoteFocused = false
+                    transactionType = newValue
                 }
-                Text(title)
-                    .font(.system(size: typeToggleFontSize, weight: .medium))
-                    .foregroundColor(isSelected ? .white : Color.primary)
-            }
-            .frame(maxWidth: .infinity)
-        }
+            ),
+            title: { type in
+                switch type {
+                case .expense: return "支出"
+                case .income: return "收入"
+                default: return "转账"
+                }
+            },
+            height: max(typeToggleHeight, 38)
+        )
     }
 
     // MARK: - Category Grid (4 columns, vertical scroll)
@@ -586,6 +545,14 @@ struct QuickRecordView: View {
                 calcActionButton("⌫", color: .secondary) {
                     if !amountString.isEmpty { amountString.removeLast() }
                 }
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: 0.5).onEnded { _ in
+                        guard !amountString.isEmpty else { return }
+                        Haptics.warning()
+                        amountString = ""
+                    }
+                )
+                .accessibilityHint("长按清空金额")
             }
 
             // Row 2: 4, 5, 6, +
@@ -624,12 +591,15 @@ struct QuickRecordView: View {
             Text(digit)
                 .font(.system(size: 22, weight: .medium, design: .rounded))
                 .frame(maxWidth: .infinity, minHeight: calculatorButtonHeight, maxHeight: calculatorButtonHeight)
-                .background(Color.appCardMutedBackground)
+                .background(Color.appCardBackground)
                 .foregroundColor(keypadNumberTextColor)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .shadow(color: Color.black.opacity(0.04), radius: 2, y: 1)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.borderSoft, lineWidth: 0.8)
+                )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableButtonStyle(scale: 0.94))
     }
 
     private func calcDecimalButton() -> some View {
@@ -643,12 +613,15 @@ struct QuickRecordView: View {
             Text(".")
                 .font(.system(size: 22, weight: .medium, design: .rounded))
                 .frame(maxWidth: .infinity, minHeight: calculatorButtonHeight, maxHeight: calculatorButtonHeight)
-                .background(Color.appCardMutedBackground)
+                .background(Color.appCardBackground)
                 .foregroundColor(keypadNumberTextColor)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .shadow(color: Color.black.opacity(0.04), radius: 2, y: 1)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.borderSoft, lineWidth: 0.8)
+                )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableButtonStyle(scale: 0.94))
     }
 
     private func calcOperatorButton(_ op: String) -> some View {
@@ -660,11 +633,11 @@ struct QuickRecordView: View {
             Text(op)
                 .font(.system(size: 22, weight: .medium, design: .rounded))
                 .frame(maxWidth: .infinity, minHeight: calculatorButtonHeight, maxHeight: calculatorButtonHeight)
-                .background(Color.warmTeal.opacity(0.1))
-                .foregroundColor(keypadOperatorTextColor)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(Color.brandPrimary500.opacity(0.10))
+                .foregroundColor(Color.brandPrimary500)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableButtonStyle(scale: 0.94))
     }
 
     private func calcActionButton(_ label: String, color: Color, action: @escaping () -> Void) -> some View {
@@ -673,14 +646,21 @@ struct QuickRecordView: View {
             hapticFeedback()
             action()
         }) {
-            Text(label)
-                .font(.system(size: 18, weight: .medium, design: .rounded))
+            Group {
+                if label == "⌫" {
+                    Image(systemName: "delete.left")
+                        .font(.system(size: 19, weight: .medium))
+                } else {
+                    Text(label)
+                        .font(.system(size: 18, weight: .medium, design: .rounded))
+                }
+            }
                 .frame(maxWidth: .infinity, minHeight: calculatorButtonHeight, maxHeight: calculatorButtonHeight)
-                .background(Color(.tertiarySystemGroupedBackground))
-                .foregroundColor(colorScheme == .dark ? keypadSecondaryTextColor : color)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(Color.appCardMutedBackground)
+                .foregroundColor(Color.textSecondary)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableButtonStyle(scale: 0.94))
     }
 
     private func calcSaveButton() -> some View {
@@ -690,26 +670,18 @@ struct QuickRecordView: View {
             saveAndDismiss()
         }) {
             ZStack {
-                if canSave {
-                    LinearGradient(
-                        colors: [Color.heroGradientTop, Color.heroGradientBottom],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                } else {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(.tertiarySystemGroupedBackground))
-                }
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(canSave ? Color.brandPrimary500 : Color.appCardMutedBackground)
 
                 Text(isCommittingTransaction ? "保存中..." : "完成")
                     .font(.system(size: 18, weight: .semibold, design: .rounded))
-                    .foregroundColor(canSave ? .white : Color(.quaternaryLabel))
+                    .foregroundColor(canSave ? .white : Color.textTertiary)
             }
             .frame(maxWidth: .infinity, minHeight: calculatorButtonHeight, maxHeight: calculatorButtonHeight)
-            .shadow(color: canSave ? Color.heroGradientBottom.opacity(0.3) : .clear, radius: 6, y: 3)
+            .shadow(color: canSave ? Color.brandPrimary500.opacity(0.28) : .clear, radius: 8, y: 3)
+            .animation(DS.Motion.snappy, value: canSave)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableButtonStyle(scale: 0.94))
         .disabled(!canSave)
     }
 
@@ -934,8 +906,7 @@ struct QuickRecordView: View {
     }
 
     private func hapticFeedback() {
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.impactOccurred()
+        Haptics.tap()
     }
 
     // MARK: - Actions
@@ -997,6 +968,7 @@ struct QuickRecordView: View {
             return
         }
 
+        Haptics.success()
         saveDefaults(category: category)
         updateWidgetData()
 
