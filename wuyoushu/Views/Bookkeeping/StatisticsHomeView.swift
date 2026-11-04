@@ -331,7 +331,8 @@ struct StatisticsHomeView: View {
                     data: viewModel.monthlyTrend.map { item in
                         (date: item.month, value: item.expense)
                     },
-                    cardBackgroundColor: .statisticsCardBackground
+                    cardBackgroundColor: .statisticsCardBackground,
+                    isMonthly: true
                 )
             }
 

@@ -268,6 +268,8 @@ struct LineChartCard: View {
     let data: [(date: Date, value: Double)]
     var budgetLine: Double? = nil
     var cardBackgroundColor: Color = .appCardMutedBackground
+    /// 每个数据点代表一个月（坐标标签显示月份而非日期）
+    var isMonthly: Bool = false
 
     @State private var pathProgress: CGFloat = 0
     @State private var pointsAppeared: Bool = false
@@ -286,13 +288,6 @@ struct LineChartCard: View {
     private var peakDay: (date: Date, value: Double)? {
         guard let peak = data.max(by: { $0.value < $1.value }), peak.value > 0 else { return nil }
         return peak
-    }
-
-    /// 数据点间隔超过 25 天视为按月数据，坐标标签显示月份而非日期
-    private var isMonthly: Bool {
-        let dates = data.map(\.date).sorted()
-        guard dates.count >= 2 else { return false }
-        return dates[1].timeIntervalSince(dates[0]) > 25 * 86_400
     }
 
     private var axisFormat: String { isMonthly ? "M月" : "dd" }

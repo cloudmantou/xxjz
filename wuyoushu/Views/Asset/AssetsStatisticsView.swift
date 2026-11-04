@@ -171,7 +171,8 @@ struct AssetsStatisticsView: View {
     private var valueTrendSection: some View {
         LineChartCard(
             title: "资产价值趋势",
-            data: monthlyValueTrend
+            data: monthlyValueTrend,
+            isMonthly: true
         )
     }
 
