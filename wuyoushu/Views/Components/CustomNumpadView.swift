@@ -20,34 +20,21 @@ struct CustomNumpadView: View {
         GridItem(.flexible(), spacing: 8)
     ]
 
-    // MARK: - Dark Mode Adaptive Colors
-    // Dark mode uses high-contrast semantic colors for accessibility.
-    // Digit keys: slightly lighter bg than keyboard bg, white text.
-    // Action keys: subtle blue-gray bg, teal text.
-    // Confirm: bright amber bg, near-black text (highest contrast pair).
-
+    // MARK: - Brand Adaptive Colors
     private var digitBgColor: Color {
-        colorScheme == .dark ? Color(hex: "3D5A73") : Color.warmMint
+        Color.appCardBackground
     }
     private var digitFgColor: Color {
-        colorScheme == .dark ? Color.white : Color(hex: "37474F")
+        Color.primary
     }
     private var actionBgColor: Color {
-        colorScheme == .dark ? Color(hex: "2E4A5E") : Color.warmTealLight
+        Color.warmTeal.opacity(0.12)
     }
     private var actionFgColor: Color {
-        colorScheme == .dark ? Color(hex: "4DD0C5") : Color.warmTeal
+        Color.warmTeal
     }
     private var deleteFgColor: Color {
-        // Soft red for delete icon — distinguishable but not alarming.
-        colorScheme == .dark ? Color(hex: "EF9A9A") : Color(hex: "546E7A")
-    }
-    private var confirmBgColor: Color {
-        // Bright amber — high brightness for dark backgrounds.
-        colorScheme == .dark ? Color(hex: "FFB300") : Color.warmYellow
-    }
-    private var confirmFgColor: Color {
-        colorScheme == .dark ? Color(hex: "1A1A1A") : Color(hex: "5D4037")
+        Color.secondary
     }
 
     var body: some View {
@@ -217,10 +204,17 @@ struct CustomNumpadView: View {
             Text("记账")
                 .font(.system(size: 16, weight: .bold, design: .rounded))
                 .frame(maxWidth: .infinity, minHeight: 48)
-                .background(confirmBgColor)
+                .background(
+                    LinearGradient(
+                        colors: [Color.heroGradientTop, Color.heroGradientBottom],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
                 .cornerRadius(14)
+                .shadow(color: Color.warmTeal.opacity(0.3), radius: 6, y: 2)
         }
-        .foregroundColor(confirmFgColor)
+        .foregroundColor(.white)
     }
 
     // MARK: - Helpers

@@ -8,36 +8,15 @@ struct WishCard: View {
     }
 
     var body: some View {
-        HStack(spacing: Constants.UI.spacing) {
+        HStack(spacing: 14) {
             // Thumbnail
-            if let imageData = item.imageData, let uiImage = UIImage(data: imageData) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: Constants.UI.thumbnailSize, height: Constants.UI.thumbnailSize)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(
-                        LinearGradient(
-                            colors: visualDescriptor.gradientColors,
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: Constants.UI.thumbnailSize, height: Constants.UI.thumbnailSize)
-                    .overlay {
-                        Image(systemName: visualDescriptor.symbolName)
-                            .font(.system(size: 22, weight: .medium))
-                            .foregroundStyle(visualDescriptor.tintColor)
-                    }
-            }
+            thumbnailView
 
             // Info
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .center) {
                     Text(item.name)
-                        .font(.headline)
+                        .font(.system(size: 15, weight: .semibold))
                         .lineLimit(1)
 
                     Spacer()
@@ -45,36 +24,65 @@ struct WishCard: View {
                     PriorityBadge(priority: Int(item.priority))
                 }
 
-                Text(L10n.tr(item.category))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                // 分类与购买状态标签
+                HStack(spacing: 6) {
+                    Text(L10n.tr(item.category))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2.5)
+                        .background(Color.appPillBackground)
+                        .clipShape(Capsule())
 
-                HStack {
-                    if let lowestPrice = item.currentLowestPrice {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("最低价")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                            Text(lowestPrice.currencyString)
-                                .font(.callout)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(lowestPrice <= item.targetPrice ? Color.profitGreen : Color.warningOrange)
-                        }
+                    if item.isPurchased {
+                        Text("已购")
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Color.profitGreen)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.profitGreen.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+                }
+
+                // 数值对比行
+                HStack(alignment: .lastTextBaseline) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("目标价")
+                            .font(.system(size: 10, design: .rounded))
+                            .foregroundStyle(.secondary)
+                        Text(item.targetPrice.currencyString)
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.warmCoral)
+                            .monospacedDigit()
                     }
 
                     Spacer()
 
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("目标价")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        Text(item.targetPrice.currencyString)
-                            .font(.callout)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(Color.warmCoral)
-                        if item.targetDailyCost > 0 {
+                    if let lowestPrice = item.currentLowestPrice {
+                        VStack(alignment: .trailing, spacing: 1) {
+                            HStack(spacing: 2) {
+                                if lowestPrice <= item.targetPrice {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 9))
+                                }
+                                Text(lowestPrice <= item.targetPrice ? "已达目标" : "最低价")
+                                    .font(.system(size: 10, design: .rounded))
+                            }
+                            .foregroundStyle(lowestPrice <= item.targetPrice ? Color.profitGreen : Color.warningOrange)
+
+                            Text(lowestPrice.currencyString)
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(lowestPrice <= item.targetPrice ? Color.profitGreen : Color.warningOrange)
+                                .monospacedDigit()
+                        }
+                    } else if item.targetDailyCost > 0 {
+                        HStack(spacing: 3) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.tertiary)
                             Text(item.targetDailyCost.dailyCostString)
-                                .font(.caption2)
+                                .font(.system(size: 11, design: .rounded))
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
                         }
@@ -82,9 +90,36 @@ struct WishCard: View {
                 }
             }
         }
-        .padding(Constants.UI.cardPadding)
-        .cardStyle()
-        .opacity(item.isPurchased ? 0.6 : 1)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
+        .cardStyle(variant: .default, radius: CardRadius.medium)
+        .opacity(item.isPurchased ? 0.72 : 1)
+    }
+
+    @ViewBuilder
+    private var thumbnailView: some View {
+        if let imageData = item.imageData, let uiImage = UIImage(data: imageData) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 58, height: 58)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        } else {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: visualDescriptor.gradientColors,
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                Image(systemName: visualDescriptor.symbolName)
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(visualDescriptor.tintColor)
+            }
+            .frame(width: 58, height: 58)
+        }
     }
 }
 
@@ -92,13 +127,19 @@ struct PriorityBadge: View {
     let priority: Int
 
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(0..<5) { index in
-                Circle()
-                    .fill(index < priority ? Color.warningOrange : Color.gray.opacity(0.3))
-                    .frame(width: 6, height: 6)
-            }
+        HStack(spacing: 3) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 8.5))
+                .foregroundStyle(Color.warmYellow)
+
+            Text("P\(priority)")
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundStyle(Color.warmYellowDark)
         }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Color.pastelYellow)
+        .clipShape(Capsule())
     }
 }
 

@@ -112,6 +112,14 @@ struct QuickRecordView: View {
         Color.primary
     }
 
+    private var keypadSecondaryTextColor: Color {
+        Color.secondary
+    }
+
+    private var keypadOperatorTextColor: Color {
+        Color.warmTeal
+    }
+
     private var displayAmount: String {
         if amountString.isEmpty { return "0.00" }
         // Show the raw expression while typing
@@ -296,7 +304,7 @@ struct QuickRecordView: View {
         let isSelected = selectedCategory == category.key
         return Button(action: {
             isNoteFocused = false
-            withAnimation(.easeInOut(duration: 0.15)) {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.72)) {
                 selectedCategory = category.key
                 selectedSubcategory = nil
             }
@@ -312,11 +320,13 @@ struct QuickRecordView: View {
                     )
                     .overlay(
                         Circle()
-                            .stroke(isSelected ? Color.warmTeal : Color.clear, lineWidth: 2.5)
+                            .stroke(isSelected ? Color.warmTeal : Color.borderSoft.opacity(0.6), lineWidth: isSelected ? 2.5 : 0.6)
                     )
-                    .shadow(color: isSelected ? Color.warmTeal.opacity(0.3) : Color.clear, radius: 4, y: 2)
+                    .scaleEffect(isSelected ? 1.08 : 1.0)
+                    .shadow(color: isSelected ? Color.warmTeal.opacity(0.3) : Color.black.opacity(0.03), radius: isSelected ? 6 : 2, y: isSelected ? 3 : 1)
+
                 Text(category.localizedName)
-                    .font(.system(size: categoryLabelFontSize, weight: isSelected ? .semibold : .regular))
+                    .font(.system(size: categoryLabelFontSize, weight: isSelected ? .bold : .medium))
                     .foregroundColor(isSelected ? Color.warmTeal : .secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -334,15 +344,20 @@ struct QuickRecordView: View {
         }) {
             VStack(spacing: 5) {
                 Image(systemName: "plus")
-                    .font(.system(size: 20, weight: .medium))
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.secondary)
                     .frame(width: categoryIconSize, height: categoryIconSize)
                     .background(
                         Circle()
-                            .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [4]))
-                            .foregroundColor(Color.secondary)
+                            .fill(Color.appPillBackground)
+                    )
+                    .overlay(
+                        Circle()
+                            .strokeBorder(style: StrokeStyle(lineWidth: 1.2, dash: [4]))
+                            .foregroundColor(Color.borderMedium)
                     )
                 Text("自定义")
-                    .font(.system(size: categoryLabelFontSize))
+                    .font(.system(size: categoryLabelFontSize, weight: .medium))
                     .foregroundColor(Color.secondary)
                     .lineLimit(1)
             }
@@ -357,15 +372,16 @@ struct QuickRecordView: View {
             // Camera icon
             Button(action: {}) {
                 Image(systemName: "camera.fill")
-                    .font(.system(size: 18))
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 16))
+                    .foregroundColor(.warmTeal)
                     .frame(width: 36, height: 36)
-                    .background(Circle().fill(Color(.tertiarySystemGroupedBackground)))
+                    .background(Circle().fill(Color.warmTeal.opacity(0.12)))
+                    .overlay(Circle().stroke(Color.warmTeal.opacity(0.22), lineWidth: 0.6))
             }
             .buttonStyle(.plain)
 
             TextField("备注（自动识别或手动输入）", text: $note)
-                .font(.system(size: 16))
+                .font(.system(size: 15))
                 .foregroundColor(.primary)
                 .submitLabel(.done)
                 .lineLimit(1)
@@ -373,12 +389,12 @@ struct QuickRecordView: View {
                 .onSubmit { isNoteFocused = false }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
-                .background(Color.appCardBackground.opacity(0.82))
-                .cornerRadius(8)
+                .background(Color.appPillBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text("¥")
-                    .font(.system(size: 20, weight: .medium, design: .rounded))
+                    .font(.system(size: 20, weight: .semibold, design: .rounded))
                     .foregroundColor(.secondary)
                 Text(displayAmount)
                     .font(.system(size: 34, weight: .bold, design: .rounded))
@@ -386,10 +402,15 @@ struct QuickRecordView: View {
                     .monospacedDigit()
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Color.appCardMutedBackground)
-        .cornerRadius(12)
+        .background(Color.appCardBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.borderSoft, lineWidth: 0.8)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .shadow(color: Color.black.opacity(0.04), radius: 8, y: 2)
     }
 
     // MARK: - Quick Action Row
@@ -589,17 +610,18 @@ struct QuickRecordView: View {
             appendDigit(digit)
         }) {
             Text(digit)
-                .font(.system(size: 22, weight: .medium, design: .rounded))
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
                 .frame(maxWidth: .infinity, minHeight: calculatorButtonHeight, maxHeight: calculatorButtonHeight)
                 .background(Color.appCardBackground)
                 .foregroundColor(keypadNumberTextColor)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Color.borderSoft, lineWidth: 0.8)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.borderSoft.opacity(0.8), lineWidth: 0.7)
                 )
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .shadow(color: Color.black.opacity(0.03), radius: 2, y: 1)
         }
-        .buttonStyle(PressableButtonStyle(scale: 0.94))
+        .tactilePressFeedback(scale: 0.96)
     }
 
     private func calcDecimalButton() -> some View {
@@ -611,17 +633,18 @@ struct QuickRecordView: View {
             }
         }) {
             Text(".")
-                .font(.system(size: 22, weight: .medium, design: .rounded))
+                .font(.system(size: 24, weight: .bold, design: .rounded))
                 .frame(maxWidth: .infinity, minHeight: calculatorButtonHeight, maxHeight: calculatorButtonHeight)
                 .background(Color.appCardBackground)
                 .foregroundColor(keypadNumberTextColor)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Color.borderSoft, lineWidth: 0.8)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.borderSoft.opacity(0.8), lineWidth: 0.7)
                 )
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .shadow(color: Color.black.opacity(0.03), radius: 2, y: 1)
         }
-        .buttonStyle(PressableButtonStyle(scale: 0.94))
+        .tactilePressFeedback(scale: 0.96)
     }
 
     private func calcOperatorButton(_ op: String) -> some View {
@@ -631,13 +654,17 @@ struct QuickRecordView: View {
             appendOperator(op)
         }) {
             Text(op)
-                .font(.system(size: 22, weight: .medium, design: .rounded))
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
                 .frame(maxWidth: .infinity, minHeight: calculatorButtonHeight, maxHeight: calculatorButtonHeight)
-                .background(Color.brandPrimary500.opacity(0.10))
-                .foregroundColor(Color.brandPrimary500)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(Color.warmTeal.opacity(0.12))
+                .foregroundColor(keypadOperatorTextColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.warmTeal.opacity(0.25), lineWidth: 0.8)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
-        .buttonStyle(PressableButtonStyle(scale: 0.94))
+        .tactilePressFeedback(scale: 0.96)
     }
 
     private func calcActionButton(_ label: String, color: Color, action: @escaping () -> Void) -> some View {
@@ -652,15 +679,19 @@ struct QuickRecordView: View {
                         .font(.system(size: 19, weight: .medium))
                 } else {
                     Text(label)
-                        .font(.system(size: 18, weight: .medium, design: .rounded))
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
                 }
             }
                 .frame(maxWidth: .infinity, minHeight: calculatorButtonHeight, maxHeight: calculatorButtonHeight)
-                .background(Color.appCardMutedBackground)
-                .foregroundColor(Color.textSecondary)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(Color.appPillBackground)
+                .foregroundColor(colorScheme == .dark ? keypadSecondaryTextColor : color)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.borderSoft.opacity(0.7), lineWidth: 0.6)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
-        .buttonStyle(PressableButtonStyle(scale: 0.94))
+        .tactilePressFeedback(scale: 0.96)
     }
 
     private func calcSaveButton() -> some View {
@@ -670,18 +701,30 @@ struct QuickRecordView: View {
             saveAndDismiss()
         }) {
             ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(canSave ? Color.brandPrimary500 : Color.appCardMutedBackground)
+                if canSave {
+                    LinearGradient(
+                        colors: [Color.heroGradientTop, Color.heroGradientBottom],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                } else {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.appPillBackground)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.borderSoft.opacity(0.6), lineWidth: 0.6)
+                        )
+                }
 
                 Text(isCommittingTransaction ? "保存中..." : "完成")
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
-                    .foregroundColor(canSave ? .white : Color.textTertiary)
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .foregroundColor(canSave ? .white : Color.secondary.opacity(0.6))
             }
             .frame(maxWidth: .infinity, minHeight: calculatorButtonHeight, maxHeight: calculatorButtonHeight)
-            .shadow(color: canSave ? Color.brandPrimary500.opacity(0.28) : .clear, radius: 8, y: 3)
-            .animation(DS.Motion.snappy, value: canSave)
+            .shadow(color: canSave ? Color.warmTeal.opacity(0.35) : .clear, radius: 8, y: 3)
         }
-        .buttonStyle(PressableButtonStyle(scale: 0.94))
+        .tactilePressFeedback(scale: 0.96)
         .disabled(!canSave)
     }
 

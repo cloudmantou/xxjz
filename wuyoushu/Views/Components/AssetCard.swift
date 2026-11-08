@@ -34,11 +34,11 @@ struct AssetCard: View {
 
                 // 分类标签
                 Text(L10n.tr(asset.category))
-                    .font(.system(size: 12))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(Color(.tertiarySystemGroupedBackground))
+                    .padding(.vertical, 2.5)
+                    .background(Color.appPillBackground)
                     .clipShape(Capsule())
 
                 // 数值行

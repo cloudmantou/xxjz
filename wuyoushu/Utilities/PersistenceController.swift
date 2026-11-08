@@ -155,7 +155,11 @@ final class PersistenceController: ObservableObject {
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
             return false
         }
+        #if targetEnvironment(simulator)
+        return false
+        #else
         return UserDefaults.standard.object(forKey: Constants.ICloud.cloudSyncPreferenceKey) as? Bool ?? true
+        #endif
     }
 
     func retryStoreLoad() {
