@@ -147,11 +147,7 @@ struct DashboardView: View {
                     Text(router.isViewingToday ? "今天" : router.selectedReceiptDate.formatted(as: "M月d日"))
                         .font(.dsLargeTitle)
                         .foregroundStyle(Color.textPrimary)
-                }
 
-                Spacer()
-
-                HStack(spacing: DS.Space.xs) {
                     if !router.isViewingToday {
                         Button {
                             Haptics.selection()
@@ -167,11 +163,11 @@ struct DashboardView: View {
                         .buttonStyle(.pressable)
                         .transition(.scale(scale: 0.8).combined(with: .opacity))
                     }
-
-                    DSIconButton(systemName: "calendar", size: 36) {
-                        showDatePicker = true
-                    }
                 }
+
+                Spacer()
+
+                homeDateNavigator
             }
 
             weekStrip
@@ -187,6 +183,70 @@ struct DashboardView: View {
     private var headerOverline: String {
         let weekday = router.selectedReceiptDate.formatted(as: "EEEE")
         return "默认账本 · \(weekday)"
+    }
+
+    // MARK: - Date Navigator
+    private var homeDateNavigator: some View {
+        HStack(spacing: 3) {
+            Button(action: {
+                let generator = UIImpactFeedbackGenerator(style: .light)
+                generator.impactOccurred()
+                router.goToPreviousDay()
+            }) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.92))
+                    .frame(width: 32, height: 38)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("前一天")
+
+            Button(action: {
+                let generator = UIImpactFeedbackGenerator(style: .light)
+                generator.impactOccurred()
+                showDatePicker = true
+            }) {
+                VStack(spacing: 0) {
+                    Text(router.selectedReceiptDate.formatted(as: "dd"))
+                        .font(.system(size: 16, weight: .heavy, design: .rounded))
+                        .foregroundStyle(Color.white)
+                    Text(router.selectedReceiptDate.formatted(as: "MM月"))
+                        .font(.system(size: 9, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color.white.opacity(0.82))
+                }
+                .padding(.horizontal, 9)
+                .frame(height: 38)
+                .background(Color.white.opacity(0.18))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("选择日期，" + router.selectedReceiptDate.formatted(as: "M月d日"))
+
+            Button(action: {
+                let generator = UIImpactFeedbackGenerator(style: .light)
+                generator.impactOccurred()
+                router.goToNextDay()
+            }) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.92))
+                    .frame(width: 32, height: 38)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("后一天")
+        }
+        .padding(3)
+        .background(
+            Capsule()
+                .fill(LinearGradient(colors: [Color.heroGradientTop, Color.heroGradientBottom], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .overlay(
+                    Capsule()
+                        .stroke(Color.white.opacity(0.28), lineWidth: 0.6)
+                )
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 8, y: 3)
     }
 
     // MARK: - Week Strip

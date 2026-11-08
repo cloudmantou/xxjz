@@ -14,9 +14,13 @@ struct StatCard: View {
                 // 图标背景容器
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(iconColor.opacity(0.13))
+                        .fill(iconColor.opacity(0.12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(iconColor.opacity(0.18), lineWidth: 0.7)
+                        )
                     Image(systemName: icon)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(iconColor)
                 }
                 .frame(width: 36, height: 36)
@@ -28,9 +32,10 @@ struct StatCard: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(value)
                     .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
 

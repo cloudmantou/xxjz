@@ -406,11 +406,11 @@ struct LineChartCard: View {
                         }
 
                         Circle()
-                            .fill(isSelected ? Color.blue : (isPeak ? Color.lossRed : Color.warmTeal)) // Updated selected color
+                            .fill(isSelected ? Color.warmTeal : (isPeak ? Color.lossRed : Color.warmTeal.opacity(0.8)))
                             .frame(width: isSelected ? 10 : 6, height: isSelected ? 10 : 6)
                             .overlay(
                                 Circle()
-                                    .stroke(Color.white, lineWidth: isSelected ? 2 : 0)
+                                    .stroke(Color.white, lineWidth: isSelected ? 2.5 : 1)
                             )
                             .position(x: x, y: y)
                             .scaleEffect(pointsAppeared ? 1.0 : 0.0)

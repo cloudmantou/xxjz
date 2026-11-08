@@ -94,13 +94,22 @@ struct WishlistView: View {
                     ScrollView {
                         VStack(spacing: sectionSpacing) {
                             // Summary Card
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text("目标总价")
+                            HStack(spacing: 16) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.warmCoral.opacity(0.12))
+                                        .frame(width: 44, height: 44)
+                                    Image(systemName: "heart.fill")
+                                        .font(.system(size: 20))
+                                        .foregroundStyle(Color.warmCoral)
+                                }
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("心愿目标总额")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                     Text(totalTargetValue.currencyString)
-                                        .font(.title2)
+                                        .font(.title3)
                                         .fontWeight(.bold)
                                         .foregroundStyle(Color.warmCoral)
                                         .monospacedDigit()
@@ -108,13 +117,15 @@ struct WishlistView: View {
 
                                 Spacer()
 
-                                VStack(alignment: .trailing) {
+                                VStack(alignment: .trailing, spacing: 3) {
                                     Text("平均目标价")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                     Text(averageTargetPrice.currencyString)
-                                        .font(.title3)
+                                        .font(.subheadline)
                                         .fontWeight(.semibold)
+                                        .foregroundStyle(.primary)
+                                        .monospacedDigit()
                                 }
                             }
                             .padding(16)

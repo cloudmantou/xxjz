@@ -11,65 +11,90 @@ struct BudgetManagementView: View {
     @State private var saveErrorMessage: String?
 
     var body: some View {
-        LazyVStack(spacing: 16) {
+        ScrollView {
+            VStack(spacing: 16) {
+                // Month navigator
+                HStack {
+                    Button(action: { changeMonth(-1) }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.warmTeal)
+                            .frame(width: 34, height: 34)
+                            .background(Color.warmTeal.opacity(0.12))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
 
-            // Month navigator (warm style)
-            HStack {
-                Button(action: { changeMonth(-1) }) {
-                    Image(systemName: "chevron.left")
-                        .foregroundColor(.warmTeal)
-                }
-                Spacer()
-                Text(viewModel.selectedMonth.monthYearString)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
-                    .foregroundColor(.primary)
-                Spacer()
-                Button(action: { changeMonth(1) }) {
-                    Image(systemName: "chevron.right")
-                        .foregroundColor(.warmTeal)
-                }
-            }
-            .padding(.horizontal)
+                    Spacer()
 
-            // Total budget overview (circular progress)
-            totalBudgetCard
-
-            // Category budgets
-            if !viewModel.budgetEntries.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("分类预算")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    Text(viewModel.selectedMonth.monthYearString)
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
                         .foregroundColor(.primary)
-                        .padding(.horizontal)
 
-                    ForEach(viewModel.budgetEntries, id: \.categoryKey) { entry in
-                        if let cat = BookkeepingCategory.find(key: entry.categoryKey) {
-                            warmBudgetRow(
-                                emoji: cat.emoji,
-                                name: cat.name,
-                                color: cat.color,
-                                spent: entry.spent,
-                                budget: entry.budget
-                            )
-                            .padding(.horizontal)
+                    Spacer()
+
+                    Button(action: { changeMonth(1) }) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.warmTeal)
+                            .frame(width: 34, height: 34)
+                            .background(Color.warmTeal.opacity(0.12))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+
+                // Total budget overview
+                totalBudgetCard
+
+                // Category budgets
+                if !viewModel.budgetEntries.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("分类预算")
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundColor(.primary)
+                            .padding(.horizontal, 16)
+
+                        ForEach(viewModel.budgetEntries, id: \.categoryKey) { entry in
+                            if let cat = BookkeepingCategory.find(key: entry.categoryKey) {
+                                warmBudgetRow(
+                                    emoji: cat.emoji,
+                                    name: cat.name,
+                                    color: cat.color,
+                                    spent: entry.spent,
+                                    budget: entry.budget
+                                )
+                                .padding(.horizontal, 16)
+                            }
                         }
                     }
                 }
-            }
 
-            // Add budget button
-            Button(action: {
-                showAddBudgetSheet = true
-            }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "plus.circle.fill")
-                    Text("设置分类预算")
+                // Add budget button
+                Button(action: {
+                    showAddBudgetSheet = true
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus.circle.fill")
+                        Text("设置分类预算")
+                    }
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundColor(.warmTeal)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color.warmTeal.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
-                .font(.system(size: 14, weight: .medium, design: .rounded))
-                .foregroundColor(.warmTeal)
+                .buttonStyle(.plain)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal)
         }
+        .background(Color.appPageBackground)
+        .navigationTitle("预算管理")
+        .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showAddBudgetSheet) {
             addBudgetSheet
         }
@@ -122,32 +147,40 @@ struct BudgetManagementView: View {
         let progress = budget > 0 ? min(spent / budget, 1.0) : 0.0
         let color: Color = {
             let ratio = budget > 0 ? spent / budget : 0
-            if ratio >= 1.0 { return Color.warmCoral }
+            if ratio >= 1.0 { return Color.lossRed }
             if ratio >= 0.8 { return Color.warningOrange }
             return Color.warmTeal
         }()
 
         return ZStack {
-            // Background circle
+            // Background track
             Circle()
-                .stroke(Color.warmMintDark, lineWidth: 10)
-                .frame(width: 100, height: 100)
+                .stroke(Color.secondary.opacity(0.12), lineWidth: 8)
+                .frame(width: 96, height: 96)
 
             // Progress circle
             Circle()
                 .trim(from: 0, to: CGFloat(progress))
-                .stroke(color, style: StrokeStyle(lineWidth: 10, lineCap: .round))
-                .frame(width: 100, height: 100)
+                .stroke(
+                    LinearGradient(
+                        colors: [color, color.opacity(0.85)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                )
+                .frame(width: 96, height: 96)
                 .rotationEffect(.degrees(-90))
                 .animation(.easeInOut(duration: 0.5), value: progress)
 
             // Center text
             VStack(spacing: 2) {
                 Text(String(format: "%.0f%%", progress * 100))
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .monospacedDigit()
                     .foregroundColor(.primary)
                 Text("已使用")
-                    .font(.system(size: 10, design: .rounded))
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundColor(.secondary)
             }
         }
@@ -159,55 +192,69 @@ struct BudgetManagementView: View {
         let progress = budget > 0 ? min(spent / budget, 1.0) : 0.0
         let barColor: Color = {
             let ratio = budget > 0 ? spent / budget : 0
-            if ratio >= 1.0 { return Color.warmCoral }
+            if ratio >= 1.0 { return Color.lossRed }
             if ratio >= 0.8 { return Color.warningOrange }
             return Color.warmTeal
         }()
 
-        return VStack(spacing: 8) {
+        return VStack(spacing: 10) {
             HStack(spacing: 10) {
                 Text(emoji)
-                    .font(.system(size: 20))
+                    .font(.system(size: 18))
                     .frame(width: 36, height: 36)
-                    .background(Circle().fill(color.opacity(0.5)))
+                    .background(Color.appPillBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(name)
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundColor(.primary)
                     Text("\(spent.currencyString) / \(budget.currencyString)")
                         .font(.system(size: 11, design: .rounded))
                         .foregroundColor(.secondary)
+                        .monospacedDigit()
                 }
 
                 Spacer()
 
                 if spent > budget {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(Color.warmCoral)
-                        .font(.system(size: 14))
+                    HStack(spacing: 3) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 11))
+                        Text("超支")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundColor(Color.lossRed)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.lossRed.opacity(0.12))
+                    .clipShape(Capsule())
                 }
             }
 
             // Progress bar
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    Rectangle()
-                        .fill(Color.warmMint)
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.1))
                         .frame(height: 6)
-                        .cornerRadius(3)
 
-                    Rectangle()
-                        .fill(barColor)
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [barColor, barColor.opacity(0.85)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
                         .frame(width: geometry.size.width * CGFloat(progress), height: 6)
-                        .cornerRadius(3)
-                        .animation(.easeInOut(duration: 0.3), value: progress)
+                        .animation(.easeInOut(duration: 0.35), value: progress)
                 }
             }
             .frame(height: 6)
         }
         .padding(14)
-        .cardStyle()
+        .cardStyle(variant: .default, radius: CardRadius.medium)
     }
 
     // MARK: - Add Budget Sheet

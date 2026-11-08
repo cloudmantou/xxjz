@@ -104,6 +104,9 @@ extension Color {
     static let statisticsCardBackground = cardBase
     static let surfaceElevated = cardElevated
     static let surfacePrimary = appPageBackground
+    static let appTabBarBackground = adaptive(light: "FAFAF7", dark: "1A201D")
+    static let appTabBarBorder = adaptive(light: "E4E7E1", dark: "2C3430")
+    static let appPillBackground = adaptive(light: "EDEFEA", dark: "222A26")
 
     // MARK: - Income / Expense Semantic
     static let expenseRed = semanticDanger

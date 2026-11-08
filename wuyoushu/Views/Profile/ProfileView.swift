@@ -124,7 +124,7 @@ struct ProfileView: View {
     private var userInfoCard: some View {
         ZStack(alignment: .bottomLeading) {
             // 渐变背景
-            RoundedRectangle(cornerRadius: CardRadius.large, style: .continuous)
+            RoundedRectangle(cornerRadius: CardRadius.hero, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [Color.heroGradientTop, Color.heroGradientBottom],
@@ -145,15 +145,15 @@ struct ProfileView: View {
                 .offset(x: 230, y: -10)
 
             // 内容
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 14) {
                     // 头像区
                     ZStack {
                         Circle()
                             .fill(Color.white.opacity(0.2))
-                            .frame(width: 56, height: 56)
+                            .frame(width: 54, height: 54)
                         Image(systemName: "person.fill")
-                            .font(.system(size: 26, weight: .medium))
+                            .font(.system(size: 24, weight: .medium))
                             .foregroundStyle(Color.white)
                     }
 
@@ -199,10 +199,11 @@ struct ProfileView: View {
                     }
                 }
             }
-            .padding(18)
+            .padding(20)
         }
-        .frame(height: 170)
-        .clipped()
+        .frame(height: 172)
+        .clipShape(RoundedRectangle(cornerRadius: CardRadius.hero, style: .continuous))
+        .shadow(color: Color.heroGradientTop.opacity(0.18), radius: 12, x: 0, y: 6)
     }
 
     private var statsGrid: some View {
@@ -277,41 +278,41 @@ struct ProfileView: View {
     private var settingsSection: some View {
         VStack(spacing: 0) {
             iCloudSyncStatusRow
-            Divider().padding(.leading, 52)
+            Divider().padding(.leading, 44)
             NavigationLink {
                 BudgetManagementView()
             } label: {
-                settingsRowLabel(icon: "target", title: "预算管理")
+                settingsRowLabel(icon: "target", color: .warmTeal, title: "预算管理")
             }
-            Divider().padding(.leading, 52)
+            Divider().padding(.leading, 44)
             NavigationLink {
                 AppearanceSettingsView()
             } label: {
-                settingsRowLabel(icon: "moon.fill", title: "外观")
+                settingsRowLabel(icon: "moon.fill", color: .secondaryPurple, title: "外观")
             }
-            Divider().padding(.leading, 52)
+            Divider().padding(.leading, 44)
             NavigationLink {
                 ImportView()
             } label: {
-                settingsRowLabel(icon: "square.and.arrow.down", title: "导入账单")
+                settingsRowLabel(icon: "square.and.arrow.down.fill", color: .profitGreen, title: "导入账单")
             }
-            Divider().padding(.leading, 52)
+            Divider().padding(.leading, 44)
             NavigationLink {
                 AssetImportExportView(initialTab: 0)
             } label: {
-                settingsRowLabel(icon: "archivebox.fill", title: "资产导入")
+                settingsRowLabel(icon: "archivebox.fill", color: .warningOrange, title: "资产导入")
             }
-            Divider().padding(.leading, 52)
+            Divider().padding(.leading, 44)
             NavigationLink {
                 ExportView()
             } label: {
-                settingsRowLabel(icon: "square.and.arrow.up", title: "导出账单")
+                settingsRowLabel(icon: "square.and.arrow.up.fill", color: .warmTeal, title: "导出账单")
             }
-            Divider().padding(.leading, 52)
+            Divider().padding(.leading, 44)
             NavigationLink {
                 LocalBackupView()
             } label: {
-                settingsRowLabel(icon: "externaldrive.fill", title: "完整数据备份")
+                settingsRowLabel(icon: "externaldrive.fill", color: .lossRed, title: "完整数据备份")
             }
         }
         .padding(.horizontal, 14)
@@ -321,10 +322,7 @@ struct ProfileView: View {
 
     private var iCloudSyncStatusRow: some View {
         HStack(spacing: 12) {
-            Image(systemName: "icloud.fill")
-                .font(.system(size: 16))
-                .foregroundStyle(cloudSyncPreference ? Color.warmTeal : Color.gray)
-                .frame(width: 24)
+            settingsIcon(name: "icloud.fill", color: cloudSyncPreference ? Color.warmTeal : Color.gray)
 
             Text(L10n.tr("账本 iCloud 同步"))
                 .font(.subheadline)
@@ -333,12 +331,13 @@ struct ProfileView: View {
 
             Toggle("", isOn: $cloudSyncPreference)
                 .labelsHidden()
+                .tint(Color.warmTeal)
                 .onChange(of: cloudSyncPreference) { newValue in
                     UserDefaults.standard.set(newValue, forKey: Constants.ICloud.cloudSyncPreferenceKey)
                     showCloudSyncRestartAlert = true
                 }
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
         .alert("重启生效", isPresented: $showCloudSyncRestartAlert) {
             Button("好的") {}
         } message: {
@@ -346,12 +345,20 @@ struct ProfileView: View {
         }
     }
 
-    private func settingsRowLabel(icon: String, title: String) -> some View {
+    private func settingsIcon(name: String, color: Color) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(color.opacity(0.12))
+                .frame(width: 32, height: 32)
+            Image(systemName: name)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(color)
+        }
+    }
+
+    private func settingsRowLabel(icon: String, color: Color, title: String) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 16))
-                .foregroundStyle(Color.warmTeal)
-                .frame(width: 24)
+            settingsIcon(name: icon, color: color)
 
             Text(title)
                 .font(.subheadline)
@@ -360,10 +367,10 @@ struct ProfileView: View {
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(.caption)
+                .font(.caption2.weight(.bold))
                 .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
     }
 
     private var shortcutsSection: some View {
@@ -371,11 +378,8 @@ struct ProfileView: View {
             Button {
                 openShortcutsApp()
             } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "bolt.fill")
-                        .font(.system(size: 15))
-                        .foregroundColor(.warmTeal)
-                        .frame(width: 24)
+                HStack(spacing: 12) {
+                    settingsIcon(name: "bolt.fill", color: .warningOrange)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("打开快捷指令 App")
                             .font(.subheadline.weight(.medium))
@@ -394,16 +398,13 @@ struct ProfileView: View {
             .buttonStyle(.plain)
 
             Divider()
-                .padding(.leading, 34)
+                .padding(.leading, 44)
 
             NavigationLink {
                 ShortcutTutorialView()
             } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "play.rectangle.on.rectangle.fill")
-                        .font(.system(size: 15))
-                        .foregroundColor(.warmTeal)
-                        .frame(width: 24)
+                HStack(spacing: 12) {
+                    settingsIcon(name: "play.rectangle.on.rectangle.fill", color: .warmTeal)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("自动记账教程")
                             .font(.subheadline.weight(.medium))
@@ -443,8 +444,8 @@ struct ProfileView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            .padding(.vertical, 10)
-            Divider().padding(.leading, 16)
+            .padding(.vertical, 12)
+            Divider().padding(.leading, 0)
             HStack {
                 Text("构建")
                     .font(.subheadline)
@@ -453,9 +454,10 @@ struct ProfileView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            .padding(.vertical, 10)
+            .padding(.vertical, 12)
         }
-        .padding(.horizontal, pageHorizontalPadding)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
         .cardStyle()
     }
 
@@ -466,10 +468,7 @@ struct ProfileView: View {
                     openProfileLink(link)
                 } label: {
                     HStack(spacing: 12) {
-                        Image(systemName: iconName(for: link))
-                            .font(.system(size: 16))
-                            .foregroundStyle(Color.warmTeal)
-                            .frame(width: 24)
+                        settingsIcon(name: iconName(for: link), color: .warmTeal)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(link.name)
@@ -487,13 +486,13 @@ struct ProfileView: View {
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
-                    .padding(.vertical, 10)
+                    .padding(.vertical, 8)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
 
                 if index < visibleProfileLinks.count - 1 {
-                    Divider().padding(.leading, 52)
+                    Divider().padding(.leading, 44)
                 }
             }
         }

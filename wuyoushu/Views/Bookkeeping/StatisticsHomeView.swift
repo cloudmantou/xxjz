@@ -38,6 +38,7 @@ struct StatisticsHomeView: View {
     @State private var selectedSection: StatisticsSection = .trend
     @State private var previousSection: StatisticsSection = .trend
     @State private var selectedRankType: StatisticsRankType = .expense
+    @Namespace private var selectorNamespace
 
     private var screenWidth: CGFloat {
         UIScreen.main.bounds.width
@@ -261,16 +262,51 @@ struct StatisticsHomeView: View {
     // MARK: - 分段选择器
 
     private var smoothSectionSelector: some View {
-        DSSegmentedControl(
-            items: StatisticsSection.allCases,
-            selection: Binding(
-                get: { selectedSection },
-                set: { newValue in
-                    previousSection = selectedSection
-                    selectedSection = newValue
+        HStack(spacing: 3) {
+            ForEach(StatisticsSection.allCases) { section in
+                Button {
+                    guard selectedSection != section else { return }
+                    let generator = UIImpactFeedbackGenerator(style: .light)
+                    generator.impactOccurred()
+                    let wasSection = selectedSection
+                    previousSection = wasSection
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                        selectedSection = section
+                    }
+                } label: {
+                    ZStack {
+                        if selectedSection == section {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.heroGradientTop, Color.heroGradientBottom],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .matchedGeometryEffect(id: "selectorBackground", in: selectorNamespace)
+                                .shadow(color: Color.warmTeal.opacity(0.22), radius: 6, y: 2)
+                        }
+
+                        Text(section.rawValue)
+                            .font(.system(size: 13, weight: selectedSection == section ? .semibold : .medium, design: .rounded))
+                            .foregroundColor(selectedSection == section ? .white : .textSecondary)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity)
+                    }
                 }
-            ),
-            title: { $0.rawValue }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selectedSection == section ? .isSelected : [])
+            }
+        }
+        .padding(3)
+        .background(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(Color.appPillBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .stroke(Color.borderSoft.opacity(0.7), lineWidth: 0.8)
         )
     }
 

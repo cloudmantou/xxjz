@@ -114,16 +114,17 @@ struct BillDetailView: View {
     private var headerCard: some View {
         VStack(spacing: 12) {
             Text(categoryEmoji)
-                .font(.system(size: 40))
+                .font(.system(size: 44))
 
             HStack(spacing: 4) {
                 Text("¥")
-                    .font(.system(size: 28, weight: .medium, design: .rounded))
+                    .font(.system(size: 26, weight: .semibold, design: .rounded))
                     .foregroundStyle(.secondary)
                 TextField("0.00", text: $editAmount)
-                    .font(.system(size: 36, weight: .black, design: .rounded))
+                    .font(.system(size: 36, weight: .bold, design: .rounded))
                     .multilineTextAlignment(.center)
                     .keyboardType(.decimalPad)
+                    .monospacedDigit()
             }
             .foregroundStyle(editIsIncome ? Color.profitGreen : .primary)
 
@@ -136,22 +137,47 @@ struct BillDetailView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.appCardBackground)
-        )
+        .cardStyle(variant: .default, radius: CardRadius.large)
     }
 
     private func typeToggleButton(label: String, active: Bool) -> some View {
         Text(label)
-            .font(.system(size: 14, weight: active ? .bold : .medium))
+            .font(.system(size: 13, weight: active ? .bold : .medium, design: .rounded))
             .foregroundStyle(active ? .white : .secondary)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 22)
+            .padding(.vertical, 7)
             .background(
-                Capsule()
-                    .fill(active ? Color.warmTeal : Color(UIColor.secondarySystemFill))
+                Group {
+                    if active {
+                        LinearGradient(
+                            colors: [Color.heroGradientTop, Color.heroGradientBottom],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    } else {
+                        Color.appPillBackground
+                    }
+                }
             )
+            .clipShape(Capsule())
+            .shadow(color: active ? Color.warmTeal.opacity(0.3) : .clear, radius: 4, y: 2)
+    }
+
+    // MARK: - Row Icon Helper
+
+    private func rowIcon(_ systemName: String, color: Color) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(color.opacity(0.12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(color.opacity(0.2), lineWidth: 0.6)
+                )
+            Image(systemName: systemName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(color)
+        }
+        .frame(width: 28, height: 28)
     }
 
     // MARK: - Detail List
@@ -162,25 +188,21 @@ struct BillDetailView: View {
             editNoteRow
             editDateRow
             fundAccountPickerRow
-            toggleRow(icon: "🎯", label: "不计入预算", isOn: $editNotInBudget)
+            toggleRow(systemName: "target", color: .semanticWarning, label: "不计入预算", isOn: $editNotInBudget)
             editSourceRow
 
             if let transaction {
-                detailRow(icon: "🆔", label: "账单ID", value: transaction.id.uuidString.prefix(8).description + "…")
+                detailRow(systemName: "number", color: .secondary, label: "账单ID", value: transaction.id.uuidString.prefix(8).description + "…")
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.appCardBackground)
-        )
+        .padding(.vertical, 4)
+        .cardStyle(variant: .default, radius: CardRadius.medium)
         .padding(.horizontal, 16)
     }
 
-    private func detailRow(icon: String, label: String, value: String) -> some View {
+    private func detailRow(systemName: String, color: Color, label: String, value: String) -> some View {
         HStack(spacing: 12) {
-            Text(icon)
-                .font(.system(size: 18))
-                .frame(width: 28)
+            rowIcon(systemName, color: color)
 
             Text(label)
                 .font(.system(size: 14))
@@ -195,7 +217,7 @@ struct BillDetailView: View {
                 .truncationMode(.middle)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 13)
+        .padding(.vertical, 12)
         .overlay(alignment: .bottom) {
             Divider().padding(.leading, 56)
         }
@@ -203,9 +225,7 @@ struct BillDetailView: View {
 
     private var editNoteRow: some View {
         HStack(spacing: 12) {
-            Text("📝")
-                .font(.system(size: 18))
-                .frame(width: 28)
+            rowIcon("note.text", color: .warmTeal)
             Text("备注")
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
@@ -216,7 +236,7 @@ struct BillDetailView: View {
                 .foregroundStyle(.primary)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 13)
+        .padding(.vertical, 12)
         .overlay(alignment: .bottom) {
             Divider().padding(.leading, 56)
         }
@@ -224,9 +244,7 @@ struct BillDetailView: View {
 
     private var editDateRow: some View {
         HStack(spacing: 12) {
-            Text("📅")
-                .font(.system(size: 18))
-                .frame(width: 28)
+            rowIcon("calendar", color: .semanticInfo)
             Text("日期")
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
@@ -243,9 +261,18 @@ struct BillDetailView: View {
 
     private var categoryPickerRow: some View {
         HStack(spacing: 12) {
-            Text(categoryEmoji)
-                .font(.system(size: 18))
-                .frame(width: 28)
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.warmTeal.opacity(0.12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Color.warmTeal.opacity(0.2), lineWidth: 0.6)
+                    )
+                Text(categoryEmoji)
+                    .font(.system(size: 14))
+            }
+            .frame(width: 28, height: 28)
+
             Text("类目")
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
@@ -267,9 +294,7 @@ struct BillDetailView: View {
 
     private var fundAccountPickerRow: some View {
         HStack(spacing: 12) {
-            Text(fundAccountEmoji)
-                .font(.system(size: 18))
-                .frame(width: 28)
+            rowIcon("creditcard.fill", color: .warmYellow)
             Text("资金账户")
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
@@ -291,9 +316,7 @@ struct BillDetailView: View {
 
     private var editSourceRow: some View {
         HStack(spacing: 12) {
-            Text("📱")
-                .font(.system(size: 18))
-                .frame(width: 28)
+            rowIcon("arrow.left.arrow.right", color: .secondary)
             Text("来源")
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
@@ -304,17 +327,15 @@ struct BillDetailView: View {
                 .foregroundStyle(.primary)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 13)
+        .padding(.vertical, 12)
         .overlay(alignment: .bottom) {
             Divider().padding(.leading, 56)
         }
     }
 
-    private func toggleRow(icon: String, label: String, isOn: Binding<Bool>) -> some View {
+    private func toggleRow(systemName: String, color: Color, label: String, isOn: Binding<Bool>) -> some View {
         HStack(spacing: 12) {
-            Text(icon)
-                .font(.system(size: 18))
-                .frame(width: 28)
+            rowIcon(systemName, color: color)
             Text(label)
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
@@ -334,35 +355,45 @@ struct BillDetailView: View {
     private var actionButtons: some View {
         VStack(spacing: 12) {
             Button(action: { showRefundConfirm = true }) {
-                HStack {
+                HStack(spacing: 6) {
                     Image(systemName: "arrow.uturn.backward")
                     Text("退款冲销")
                 }
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color(hex: "E67E22"))
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color.warningOrange)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(hex: "E67E22").opacity(0.1))
+                        .fill(Color.warningOrange.opacity(0.12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.warningOrange.opacity(0.25), lineWidth: 0.8)
+                        )
                 )
             }
+            .tactilePressFeedback()
             .disabled(isCommitting || transaction == nil)
 
             Button(action: { showDeleteConfirm = true }) {
-                HStack {
+                HStack(spacing: 6) {
                     Image(systemName: "trash")
                     Text("删除记录")
                 }
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color(hex: "E94C57"))
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color.lossRed)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(hex: "E94C57").opacity(0.1))
+                        .fill(Color.lossRed.opacity(0.12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color.lossRed.opacity(0.25), lineWidth: 0.8)
+                        )
                 )
             }
+            .tactilePressFeedback()
             .disabled(isCommitting || transaction == nil)
         }
         .padding(.horizontal, 16)

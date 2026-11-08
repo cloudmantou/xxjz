@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreData
 
 struct TransactionStatsView: View {
     @Environment(\.managedObjectContext) private var viewContext

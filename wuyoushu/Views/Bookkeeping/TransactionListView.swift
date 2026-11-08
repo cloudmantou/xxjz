@@ -102,11 +102,11 @@ struct TransactionListView: View {
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.appCardMutedBackground)
+                .fill(Color.appPillBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.black.opacity(0.04), lineWidth: 1)
+                .stroke(Color.borderSoft, lineWidth: 0.8)
         )
         .padding(.horizontal, 16)
     }
@@ -114,16 +114,16 @@ struct TransactionListView: View {
     private func filterChip(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.caption.weight(isSelected ? .semibold : .regular))
+                .font(.caption.weight(isSelected ? .semibold : .medium))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(
                     Capsule()
-                        .fill(isSelected ? Color.warmTeal : Color.appCardMutedBackground)
+                        .fill(isSelected ? Color.warmTeal : Color.appPillBackground)
                 )
                 .overlay(
                     Capsule()
-                        .stroke(Color.black.opacity(isSelected ? 0 : 0.06), lineWidth: 1)
+                        .stroke(isSelected ? Color.clear : Color.borderSoft, lineWidth: 0.7)
                 )
                 .foregroundStyle(isSelected ? Color.white : Color.primary)
         }
@@ -141,6 +141,7 @@ struct TransactionListView: View {
                     Text("-\(dayExpense.currencyString)")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.lossRed)
+                        .monospacedDigit()
                 }
             }
             .padding(.horizontal, 14)
@@ -157,14 +158,8 @@ struct TransactionListView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.appCardMutedBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.black.opacity(0.04), lineWidth: 1)
-        )
+        .padding(.bottom, 4)
+        .cardStyle(variant: .default, radius: CardRadius.medium)
         .padding(.horizontal, 16)
     }
 
