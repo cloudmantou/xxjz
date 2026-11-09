@@ -901,8 +901,9 @@ final class AutoBillRuleEngine {
             break
         }
 
-        // 应用资金账户名称
-        if rule.fundAccountId > 0 {
+        // 通用/自动规则补全缺失账户；只有用户本地规则可覆盖截图中已识别的账户。
+        let hasRecognizedFund = result.fundName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        if rule.fundAccountId > 0, !hasRecognizedFund || ruleKind(of: rule) == .local {
             result.fundName = KeywordRule.fundAccountName(from: rule.fundAccountId)
         }
 

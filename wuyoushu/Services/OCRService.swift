@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import Vision
+import ImageIO
 
 struct OCRTextObservation {
     let text: String
@@ -57,13 +58,28 @@ final class MockOCRService: OCRServiceProtocol {
     }
 }
 
-// MARK: - Production OCR Service (Placeholder)
+// MARK: - Production OCR Service (on-device Vision)
 
 final class ProductionOCRService: OCRServiceProtocol {
 
     static let shared = ProductionOCRService()
 
     private init() {}
+
+    /// CGImage 不携带 UIImage 的方向信息；显式传入，保证相册旋转/镜像图片的文字与坐标一致。
+    static func visionOrientation(for orientation: UIImage.Orientation) -> CGImagePropertyOrientation {
+        switch orientation {
+        case .up: return .up
+        case .down: return .down
+        case .left: return .left
+        case .right: return .right
+        case .upMirrored: return .upMirrored
+        case .downMirrored: return .downMirrored
+        case .leftMirrored: return .leftMirrored
+        case .rightMirrored: return .rightMirrored
+        @unknown default: return .up
+        }
+    }
 
     func recognizeText(from image: UIImage) async throws -> String {
         let result = try await recognizeTextWithDetails(from: image)
@@ -136,7 +152,11 @@ final class ProductionOCRService: OCRServiceProtocol {
             request.usesLanguageCorrection = true
             request.recognitionLanguages = ["zh-Hans", "en-US"]
 
-            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            let handler = VNImageRequestHandler(
+                cgImage: cgImage,
+                orientation: Self.visionOrientation(for: image.imageOrientation),
+                options: [:]
+            )
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
                     try handler.perform([request])
