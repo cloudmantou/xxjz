@@ -18,7 +18,7 @@ enum OCRSemanticFilter {
 
     static let promotionNoiseKeywords: Set<String> = [
         "获得森林能量", "森林能量", "蚂蚁森林", "红包待领取", "待领取", "去领取",
-        "碰友日红包", "碰友日立减", "砸友日红包", "立减", "福利红包"
+        "碰友日红包", "碰友日立减", "砸友日红包", "立减", "福利红包", "金抵扣", "福利金"
     ]
 
     static let noteNoiseKeywordSet: Set<String> = navigationNoiseKeywords
@@ -101,6 +101,17 @@ struct ParsedTransaction {
     var billSource: BillSource = .unknown
     var merchantName: String?
     var transactionTime: Date?
+
+    /// 表单与批量记账共用：优先保留解析出的备注，再回退到可信商户。
+    var suggestedNote: String? {
+        for candidate in [note, merchantName, toBiz] {
+            guard let candidate else { continue }
+            let value = OCRSemanticFilter.normalize(candidate)
+            guard !OCRSemanticFilter.isLikelyNoiseNote(value) else { continue }
+            return String(value.prefix(40))
+        }
+        return nil
+    }
 
     // MARK: - AChai对齐新增字段
 
@@ -2200,7 +2211,11 @@ final class MockTransactionParserService: TransactionParserServiceProtocol {
         if looksLikeDateOrTime(normalized) { return false }
         // Skip keyword lines
         for kw in Self.skipKeywords {
-            if normalized.contains(kw) { return false }
+            if kw == "微信支付" || kw == "支付宝" {
+                if normalized == kw { return false }
+            } else if normalized.contains(kw) {
+                return false
+            }
         }
         // Skip lines that look like amounts
         if normalized.range(of: "^[¥￥]?\\d+\\.\\d{2}$", options: .regularExpression) != nil { return false }
@@ -2221,7 +2236,10 @@ final class MockTransactionParserService: TransactionParserServiceProtocol {
             return String(cleanedForNote(explicitRemark).prefix(40))
         }
 
-        // 2. 不用 merchant 当 note fallback（merchant 和 note 是不同字段）
+        // 无显式备注时，以可靠商户作为可编辑备注，避免优惠/导航文案落入记账表单。
+        if let merchant, isMeaningfulNote(merchant) {
+            return String(cleanedForNote(merchant).prefix(40))
+        }
         // 3. fallback 只取含中文、不在黑名单、不是纯标签行的行
         let skipLabels = Self.remarkLabels + ["收款方", "商户", "商户名称", "店铺", "商家",
                                                "付款方", "对方", "交易对象", "交易时间", "支付时间",
@@ -2234,8 +2252,6 @@ final class MockTransactionParserService: TransactionParserServiceProtocol {
             // 必须含中文，避免把英文/数字噪音误识别为备注
             let hasChinese = line.unicodeScalars.contains { $0.value >= 0x4E00 && $0.value <= 0x9FFF }
             if !hasChinese { continue }
-            // 不能与 merchant 完全相同（避免重复）
-            if let merchant, cleanedForNote(merchant) == line { continue }
             return String(line.prefix(40))
         }
 

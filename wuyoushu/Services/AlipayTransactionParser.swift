@@ -184,8 +184,12 @@ final class AlipayTransactionParser {
 
     /// 解析OCR结果
     static func parse(ocrResult: OCRResult) -> [ParsedTransaction] {
+        // 没有真实坐标时保留文本行序，避免伪坐标把相邻多行聚成一行。
+        guard hasUsableBoundingBoxes(ocrResult.observations) else {
+            return parse(text: ocrResult.fullText)
+        }
+
         // 1. 转换OCR观察结果为空间观察结果
-        // 如果OCR bbox不可用，回退到“伪布局”，让列结构/右对齐打分依然可用。
         let spatialObservations = buildSpatialObservations(
             from: ocrResult.fullText,
             observations: ocrResult.observations
@@ -401,7 +405,8 @@ final class AlipayTransactionParser {
     /// 构建结构化单元格
     private static func buildStructuredCells(from lines: [[SpatialTextObservation]]) -> [RecognizedCell] {
         var cells: [RecognizedCell] = []
-        let allLabels = amountKeys + dateKeys + merchantKeys + remarkKeys + incomeAmountKeys
+        let allLabels = (amountKeys + dateKeys + merchantKeys + remarkKeys + incomeAmountKeys)
+            .sorted { $0.count > $1.count }
 
         for (rowIndex, line) in lines.enumerated() {
             for (colIndex, obs) in line.enumerated() {
@@ -417,6 +422,7 @@ final class AlipayTransactionParser {
                                 columnIndex: colIndex,
                                 observation: obs
                             ))
+                            break
                         }
                     }
                 }
@@ -428,8 +434,8 @@ final class AlipayTransactionParser {
 
     /// 从文本中提取标签后的值
     private static func extractValueAfterLabel(_ text: String, labels: [String]) -> String? {
-        for label in labels {
-            if let range = text.range(of: label) {
+        for label in labels.sorted(by: { $0.count > $1.count }) {
+            if let range = text.range(of: label, options: .anchored) {
                 let afterLabel = text[range.upperBound...]
                 let trimmed = afterLabel.trimmingCharacters(in: .whitespacesAndNewlines)
                     .replacingOccurrences(of: "^[：:]+", with: "", options: .regularExpression)
@@ -450,6 +456,11 @@ final class AlipayTransactionParser {
     /// - 详情页: yyyy-MM-dd HH:mm:ss
     /// - 相对日期: 今天 HH:mm / 昨天 HH:mm
     static func extractDateFromAlipayText(_ text: String) -> Date? {
+        // Vision 可能吞掉日期与时间之间的空格，仅拆开固定宽度的完整日期时间。
+        let text = text.replacingOccurrences(
+            of: #"(\d{4}[-/.]\d{2}[-/.]\d{2})(\d{2}:\d{2}:\d{2})(?!\d)"#,
+            with: "$1 $2", options: .regularExpression
+        )
         // 尝试完整日期时间格式
         if let date = extractFullDate(text) {
             return date
@@ -1231,8 +1242,8 @@ final class AlipayTransactionParser {
         let currentLine = lines[rowIndex]
         for obs in currentLine {
             let text = obs.observation.text
-            if merchantLabels.contains(where: { text.contains($0) }) {
-                return extractValueAfterLabel(text, labels: merchantLabels)
+            if let value = extractValueAfterLabel(text, labels: merchantLabels) {
+                return value
             }
         }
 
@@ -1242,8 +1253,8 @@ final class AlipayTransactionParser {
             guard idx >= 0 && idx < lines.count else { continue }
             for obs in lines[idx] {
                 let text = obs.observation.text
-                if merchantLabels.contains(where: { text.contains($0) }) {
-                    return extractValueAfterLabel(text, labels: merchantLabels)
+                if let value = extractValueAfterLabel(text, labels: merchantLabels) {
+                    return value
                 }
             }
         }
@@ -1312,20 +1323,10 @@ final class AlipayTransactionParser {
     }
 
     private static func extractMerchantFromText(_ text: String) -> String? {
-        for label in merchantLabels {
-            if let range = text.range(of: label) {
-                let afterLabel = text[range.upperBound...]
-                if let nextLineRange = afterLabel.range(of: "\n") {
-                    let value = normalizedSemanticText(String(afterLabel[..<nextLineRange.lowerBound]))
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                        .replacingOccurrences(of: "^[：:]+", with: "", options: .regularExpression)
-                    if isLikelyMerchantFallback(value) { return value }
-                } else {
-                    let value = normalizedSemanticText(String(afterLabel))
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                        .replacingOccurrences(of: "^[：:]+", with: "", options: .regularExpression)
-                    if isLikelyMerchantFallback(value) { return value }
-                }
+        for line in text.components(separatedBy: .newlines) {
+            if let value = extractValueAfterLabel(line.trimmingCharacters(in: .whitespaces), labels: merchantLabels),
+               isLikelyMerchantFallback(value) {
+                return value
             }
         }
 

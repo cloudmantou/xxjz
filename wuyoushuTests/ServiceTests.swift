@@ -3,6 +3,7 @@ import UIKit
 import AppIntents
 import UniformTypeIdentifiers
 import CoreData
+import ImageIO
 @testable import AssetLife
 
 final class ServiceTests: XCTestCase {
@@ -19,6 +20,67 @@ final class ServiceTests: XCTestCase {
             XCTAssertTrue(result.contains("9999"))
         } catch {
             XCTFail("Should not throw error: \(error)")
+        }
+    }
+
+    func test_visionOrientation_preservesAllImageOrientations() {
+        let pairs: [(UIImage.Orientation, CGImagePropertyOrientation)] = [
+            (.up, .up), (.down, .down), (.left, .left), (.right, .right),
+            (.upMirrored, .upMirrored), (.downMirrored, .downMirrored),
+            (.leftMirrored, .leftMirrored), (.rightMirrored, .rightMirrored)
+        ]
+        for (input, expected) in pairs {
+            XCTAssertEqual(ProductionOCRService.visionOrientation(for: input), expected)
+        }
+    }
+
+    /// 程序生成无个人信息的账单图片，实际调用 Vision；不依赖开发机绝对路径。
+    @MainActor
+    func test_visionReceipt_uprightAndRotated_prefillsEditableCandidate() async throws {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let size = CGSize(width: 900, height: 1100)
+        let receipt = UIGraphicsImageRenderer(size: size, format: format).image { context in
+            UIColor.white.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            let lines = [
+                "支付宝", "支付成功", "实付 ¥35.00", "收款方 青禾餐厅",
+                "交易时间 2026-04-04 12:30:00", "备注 工作午餐", "付款方式 余额"
+            ]
+            for (index, line) in lines.enumerated() {
+                (line as NSString).draw(
+                    at: CGPoint(x: 60, y: 80 + index * 130),
+                    withAttributes: [.font: UIFont.systemFont(ofSize: 40), .foregroundColor: UIColor.black]
+                )
+            }
+        }
+        // 像素逆时针旋转，再用 UIImage 方向元数据还原；忽略方向时无法正确读取。
+        let rotatedPixels = UIGraphicsImageRenderer(
+            size: CGSize(width: size.height, height: size.width), format: format
+        ).image { context in
+            context.cgContext.translateBy(x: 0, y: size.width)
+            context.cgContext.rotate(by: -.pi / 2)
+            receipt.draw(at: .zero)
+        }
+        let rotated = UIImage(cgImage: try XCTUnwrap(rotatedPixels.cgImage), scale: 1, orientation: .right)
+        let parser = MockTransactionParserService()
+        for image in [receipt, rotated] {
+            let ocr = try await ProductionOCRService.shared.recognizeTextWithDetails(from: image)
+            let parsed = try XCTUnwrap(parser.bestCandidate(from: parser.parse(ocr)))
+            let payload = ParsedTransactionCandidatePayload(transaction: parsed)
+            let restored = payload.toParsedTransaction()
+            XCTAssertEqual(restored.amount ?? 0, 35, accuracy: 0.001)
+            XCTAssertFalse(restored.isIncome)
+            XCTAssertEqual(restored.billSource, .alipay)
+            XCTAssertEqual(restored.merchantName, "青禾餐厅")
+            XCTAssertEqual(restored.suggestedNote, "工作午餐")
+            XCTAssertEqual(restored.fundName, "余额")
+            let date = try XCTUnwrap(restored.date)
+            XCTAssertEqual(Calendar.current.component(.year, from: date), 2026)
+            XCTAssertEqual(Calendar.current.component(.month, from: date), 4)
+            XCTAssertEqual(Calendar.current.component(.day, from: date), 4)
+            XCTAssertEqual(Calendar.current.component(.hour, from: date), 12)
+            XCTAssertEqual(Calendar.current.component(.minute, from: date), 30)
         }
     }
 

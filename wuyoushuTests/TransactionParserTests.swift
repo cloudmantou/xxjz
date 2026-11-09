@@ -748,6 +748,59 @@ final class TransactionParserTests: XCTestCase {
         XCTAssertEqual(amount, 49.95, accuracy: 0.0001)
     }
 
+    func test_alipayLongestMerchantLabel_preservesName() throws {
+        let text = "支付宝\n支付成功\n实付 ¥18.50\n商户名称 青禾餐厅\n备注 同事午餐"
+        for transactions in [parser.parse(text), parser.parse(makeOCRResult(text.components(separatedBy: .newlines)))] {
+            let result = try XCTUnwrap(parser.bestCandidate(from: transactions))
+            XCTAssertEqual(result.merchantName, "青禾餐厅")
+            XCTAssertEqual(result.suggestedNote, "同事午餐")
+        }
+    }
+
+    func test_suggestedNote_preservesExplicitRemarkAndFiltersPromotionFallback() {
+        var transaction = ParsedTransaction()
+        transaction.merchantName = "青禾餐厅"
+        transaction.note = "  同事午餐  "
+        XCTAssertEqual(transaction.suggestedNote, "同事午餐")
+        transaction.note = "金抵扣"
+        XCTAssertEqual(transaction.suggestedNote, "青禾餐厅")
+        transaction.merchantName = "回首页"
+        transaction.toBiz = "青禾餐饮有限公司"
+        XCTAssertEqual(transaction.suggestedNote, "青禾餐饮有限公司")
+        transaction.toBiz = nil
+        XCTAssertNil(transaction.suggestedNote)
+    }
+
+    func test_alipayCompactOCRDate_preservesTransactionTimestamp() throws {
+        let date = try XCTUnwrap(AlipayTransactionParser.extractDateFromAlipayText(
+            "交易时间2026-04-0412:30:00"
+        ))
+        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        XCTAssertEqual(components.year, 2026)
+        XCTAssertEqual(components.month, 4)
+        XCTAssertEqual(components.day, 4)
+        XCTAssertEqual(components.hour, 12)
+        XCTAssertEqual(components.minute, 30)
+    }
+
+    func test_ruleFundAccount_fillsMissingButOnlyLocalRuleOverridesRecognizedAccount() {
+        var parsed = ParsedTransaction()
+        parsed.fundName = "余额"
+        var rule = KeywordRule(keyWord: "支付宝", fundAccountId: 2)
+        func apply() -> ParsedTransaction {
+            AutoBillRuleEngine.shared.applyRules(to: parsed, matches: [
+                RuleMatchResult(rule: rule, matchedText: "支付宝", matchScore: 1)
+            ])
+        }
+        XCTAssertEqual(apply().fundName, "余额")
+        parsed.fundName = nil
+        XCTAssertEqual(apply().fundName, "支付宝")
+        parsed.fundName = "余额"
+        rule.memberId = "local-test-user"
+        rule.fundAccountId = 3
+        XCTAssertEqual(apply().fundName, "花呗")
+    }
+
     private func parseFirst(_ text: String) -> ParsedTransaction? {
         parser.bestCandidate(from: parser.parse(text))
     }

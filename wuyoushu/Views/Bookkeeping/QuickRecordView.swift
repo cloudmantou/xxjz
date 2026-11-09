@@ -1081,7 +1081,7 @@ struct QuickRecordView: View {
                 amount: amount,
                 categoryKey: category,
                 subcategoryKey: nil,
-                note: merchantOrNote,
+                note: parsed.suggestedNote,
                 date: importedDate,
                 isIncome: parsed.isIncome,
                 fundAccountKey: fundKey,
@@ -1168,12 +1168,8 @@ struct QuickRecordView: View {
         }
 
         if overwriteExisting || note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            if let preferredCounterparty = preferredCounterparty(from: parsed), !preferredCounterparty.isEmpty {
-                note = preferredCounterparty
-            } else if let parsedNote = parsed.note,
-                      !parsedNote.isEmpty,
-                      !OCRSemanticFilter.isLikelyNoiseNote(parsedNote) {
-                note = parsedNote
+            if let suggestedNote = parsed.suggestedNote {
+                note = suggestedNote
             } else if let fallbackText, let compact = compactNote(from: fallbackText) {
                 note = compact
             }
