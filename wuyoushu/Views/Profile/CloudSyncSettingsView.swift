@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct CloudSyncSettingsView: View {
+    @ObservedObject private var preferences = PreferenceSyncCoordinator.shared
     @ObservedObject var monitor: CloudSyncMonitor
     @AppStorage(Constants.ICloud.cloudSyncPreferenceKey) private var preference = true
     @State private var showRestartAlert = false
@@ -35,9 +36,16 @@ struct CloudSyncSettingsView: View {
                 .disabled(monitor.isCheckingAccount)
             }
 
-            Text("同步范围：账单、预算、资产和心愿。自定义分类、识别规则及应用设置仅保存在本机，可通过本地备份迁移。")
+            Text("同步范围：账单、预算、资产、心愿、自定义分类和本地识别规则。应用设置与内置规则包不参与同步。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+            NavigationLink(destination: PreferenceSyncSettingsView()) {
+                Label("分类与规则同步", systemImage: "arrow.triangle.2.circlepath")
+            }
+            .font(.caption)
+            if let error = preferences.errorMessage {
+                Text(error).font(.caption).foregroundStyle(.orange)
+            }
             Text("同步由系统在网络和账户可用时调度；上传完成不表示另一台设备已下载。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)

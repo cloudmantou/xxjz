@@ -2,6 +2,7 @@ import SwiftUI
 import CoreData
 
 struct BudgetManagementView: View {
+    @ObservedObject private var syncedCategories = CustomCategoryStore.shared
     @Environment(\.managedObjectContext) private var viewContext
     @StateObject private var viewModel = BookkeepingViewModel()
 

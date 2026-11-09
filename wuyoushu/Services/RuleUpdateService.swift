@@ -493,6 +493,7 @@ final class RuleUpdateService {
     /// 插入本地规则（用于用户自定义规则）
     @discardableResult
     func insertLocalRule(_ rule: KeywordRule) -> Bool {
+        if !Thread.isMainThread { return DispatchQueue.main.sync { self.insertLocalRule(rule) } }
         var localRule = rule
         if localRule.ruleId <= 0 || isOccupiedByNonLocalRule(localRule.ruleId) {
             localRule.ruleId = nextAvailableLocalRuleId()
@@ -524,6 +525,7 @@ final class RuleUpdateService {
                 )
             ]
         }
+        if PreferenceSyncCoordinator.shared.isConfigured { return PreferenceSyncCoordinator.shared.saveRule(localRule) }
         guard KeywordRulesTable.shared.upsertRule(localRule) else { return false }
         cachedRules = nil // 清空缓存，下次会重新加载
         postRulesDidChange()
@@ -533,9 +535,11 @@ final class RuleUpdateService {
     /// 删除本地规则
     @discardableResult
     func deleteLocalRule(ruleId: Int) -> Bool {
+        if !Thread.isMainThread { return DispatchQueue.main.sync { self.deleteLocalRule(ruleId: ruleId) } }
         guard let rule = KeywordRulesTable.shared.fetchRule(byId: ruleId) else { return false }
         // 只删除本地规则
         guard ruleKind(of: rule) == .local else { return false }
+        if PreferenceSyncCoordinator.shared.isConfigured { return PreferenceSyncCoordinator.shared.deleteRule(rule) }
         guard KeywordRulesTable.shared.deleteRule(byId: ruleId) else { return false }
         cachedRules = nil
         postRulesDidChange()
@@ -574,6 +578,11 @@ final class RuleUpdateService {
             let candidate = Int.random(in: 100_000...999_999)
             if KeywordRulesTable.shared.fetchRule(byId: candidate) == nil { return candidate }
         } while true
+    }
+
+    func preferencesDidProject() {
+        cachedRules = nil
+        postRulesDidChange()
     }
 
     private func postRulesDidChange() {

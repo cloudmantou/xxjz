@@ -2,6 +2,7 @@ import SwiftUI
 import CoreData
 
 struct BookkeepingTabView: View {
+    @ObservedObject private var syncedCategories = CustomCategoryStore.shared
     @EnvironmentObject private var router: AppRouter
     @Environment(\.managedObjectContext) private var viewContext
 

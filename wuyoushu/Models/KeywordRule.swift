@@ -206,6 +206,7 @@ struct AutoBillSearchText: Codable {
 /// 关键词规则（对应AChai的keywordRules表）
 struct KeywordRule: Codable, Identifiable {
     var id: Int { ruleId }
+    var syncID: String?
 
     var ruleId: Int
     var keyWord: String
@@ -232,8 +233,10 @@ struct KeywordRule: Codable, Identifiable {
         memberTagIds: String? = nil,
         createDate: String? = nil,
         updateDate: String? = nil,
-        searchTexts: [AutoBillSearchText]? = nil
+        searchTexts: [AutoBillSearchText]? = nil,
+        syncID: String? = nil
     ) {
+        self.syncID = syncID
         self.ruleId = ruleId
         self.keyWord = keyWord
         self.memberId = memberId
