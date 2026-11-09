@@ -126,10 +126,18 @@ final class PersistenceController: ObservableObject {
     @Published private(set) var loadFailure: String?
     let storeURL: URL?
     private let inMemory: Bool
+    let cloudSync: CloudSyncMonitor
 
     init(inMemory: Bool = false) {
         self.inMemory = inMemory
-        let userWantsCloud = !inMemory && Self.userWantsCloudSync
+        let requested = UserDefaults.standard.object(forKey: Constants.ICloud.cloudSyncPreferenceKey) as? Bool ?? true
+        let runtimeAvailable = !inMemory && Self.cloudRuntimeAvailable
+        cloudSync = CloudSyncMonitor(
+            runtimeAvailable: runtimeAvailable,
+            diagnosticsURL: runtimeAvailable ? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("CloudSyncDiagnostics.json") : nil
+        )
+        let userWantsCloud = requested && runtimeAvailable
         let model = Self.makeModel(enableUniqueConstraints: false)
         let resolvedStoreURL = NSPersistentContainer.defaultDirectoryURL()
             .appendingPathComponent("AssetLife.sqlite")
@@ -138,12 +146,14 @@ final class PersistenceController: ObservableObject {
             model: model,
             storeURL: resolvedStoreURL,
             inMemory: inMemory,
-            cloudSyncRequested: userWantsCloud
+            cloudSyncRequested: userWantsCloud,
+            monitor: cloudSync
         )
         container = loaded.container
         bookkeepingCloudSyncEnabled = loaded.cloudSyncEnabled
         loadFailure = loaded.error?.localizedDescription
         configureViewContext(container)
+        cloudSync.configure(requested: requested, enabled: loaded.cloudSyncEnabled, storeError: loaded.cloudError)
     }
 
     var isStoreReady: Bool { loadFailure == nil }
@@ -151,30 +161,36 @@ final class PersistenceController: ObservableObject {
     /// User preference for iCloud sync. Always off when hosted by XCTest:
     /// unit tests must not touch iCloud, and unsigned CI builds lack the
     /// CloudKit entitlement, which makes CloudKit trap at launch.
-    private static var userWantsCloudSync: Bool {
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
-            return false
-        }
+    static var cloudRuntimeAvailable: Bool {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil { return false }
         #if targetEnvironment(simulator)
         return false
         #else
-        return UserDefaults.standard.object(forKey: Constants.ICloud.cloudSyncPreferenceKey) as? Bool ?? true
+        return true
         #endif
     }
 
     func retryStoreLoad() {
-        guard !inMemory, let storeURL else { return }
-        let wantsCloud = Self.userWantsCloudSync
+        guard !inMemory, loadFailure != nil, let storeURL else { return }
+        let requested = UserDefaults.standard.object(forKey: Constants.ICloud.cloudSyncPreferenceKey) as? Bool ?? true
+        let wantsCloud = Self.cloudRuntimeAvailable && requested
+        // Never leave two mirroring delegates managing the same SQLite store.
+        if let error = Self.detachStores(from: container) {
+            loadFailure = error.localizedDescription
+            return
+        }
         let loaded = Self.buildContainer(
             model: Self.makeModel(enableUniqueConstraints: false),
             storeURL: storeURL,
             inMemory: false,
-            cloudSyncRequested: wantsCloud
+            cloudSyncRequested: wantsCloud,
+            monitor: cloudSync
         )
         container = loaded.container
         bookkeepingCloudSyncEnabled = loaded.cloudSyncEnabled
         loadFailure = loaded.error?.localizedDescription
         configureViewContext(container)
+        cloudSync.configure(requested: requested, enabled: loaded.cloudSyncEnabled, storeError: loaded.cloudError)
     }
 
     private func configureViewContext(_ container: NSPersistentCloudKitContainer) {
@@ -186,8 +202,9 @@ final class PersistenceController: ObservableObject {
         model: NSManagedObjectModel,
         storeURL: URL,
         inMemory: Bool,
-        cloudSyncRequested: Bool
-    ) -> (container: NSPersistentCloudKitContainer, cloudSyncEnabled: Bool, error: Error?) {
+        cloudSyncRequested: Bool,
+        monitor: CloudSyncMonitor
+    ) -> (container: NSPersistentCloudKitContainer, cloudSyncEnabled: Bool, error: Error?, cloudError: Error?) {
         var container = NSPersistentCloudKitContainer(name: "AssetLife", managedObjectModel: model)
         container.persistentStoreDescriptions = [
             makeStoreDescription(
@@ -197,14 +214,17 @@ final class PersistenceController: ObservableObject {
             )
         ]
 
+        if cloudSyncRequested { monitor.observe(container) }
         if let error = loadPersistentStoresSync(container: container) {
             guard cloudSyncRequested, !inMemory else {
-                return (container, false, error)
+                return (container, false, error, cloudSyncRequested ? error : nil)
             }
 
             // CloudKit can be unavailable for many reasons (account/network/capability mismatch).
             // We gracefully fall back to a local-only store so bookkeeping remains usable.
-            print("CloudKit store load failed, fallback to local store: \(error)")
+            if let detachError = detachStores(from: container) {
+                return (container, false, detachError, error)
+            }
 
             container = NSPersistentCloudKitContainer(name: "AssetLife", managedObjectModel: model)
             container.persistentStoreDescriptions = [
@@ -221,15 +241,15 @@ final class PersistenceController: ObservableObject {
                     code: 1,
                     userInfo: [NSLocalizedDescriptionKey: "iCloud 存储加载失败：\(error.localizedDescription)\n本地存储加载失败：\(fallbackError.localizedDescription)"]
                 )
-                return (container, false, combinedError)
+                return (container, false, combinedError, error)
             }
-            return (container, false, nil)
+            return (container, false, nil, error)
         }
 
-        return (container, cloudSyncRequested && !inMemory, nil)
+        return (container, cloudSyncRequested && !inMemory, nil, nil)
     }
 
-    private static func makeStoreDescription(
+    static func makeStoreDescription(
         storeURL: URL,
         inMemory: Bool,
         cloudSyncEnabled: Bool
@@ -242,16 +262,28 @@ final class PersistenceController: ObservableObject {
             description.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
                 containerIdentifier: Constants.ICloud.containerIdentifier
             )
-            description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
-            description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
         } else {
             description.cloudKitContainerOptions = nil
         }
 
+        // Keep tracking while sync is off, so later re-enabling can export local changes.
+        if !inMemory {
+            description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+            description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+        }
         description.shouldMigrateStoreAutomatically = true
         description.shouldInferMappingModelAutomatically = true
 
         return description
+    }
+
+    private static func detachStores(from container: NSPersistentContainer) -> Error? {
+        do {
+            for store in container.persistentStoreCoordinator.persistentStores {
+                try container.persistentStoreCoordinator.remove(store)
+            }
+            return nil
+        } catch { return error }
     }
 
     private static func loadPersistentStoresSync(container: NSPersistentCloudKitContainer) -> Error? {

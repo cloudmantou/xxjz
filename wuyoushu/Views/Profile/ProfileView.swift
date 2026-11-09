@@ -31,12 +31,6 @@ struct ProfileView: View {
         assets.filter { $0.status == .active }.reduce(0) { $0 + $1.totalExtraCost }
     }
 
-    private var bookkeepingCloudSyncEnabled: Bool {
-        PersistenceController.shared.bookkeepingCloudSyncEnabled
-    }
-
-    @State private var cloudSyncPreference: Bool = UserDefaults.standard.object(forKey: Constants.ICloud.cloudSyncPreferenceKey) as? Bool ?? true
-    @State private var showCloudSyncRestartAlert = false
     @State private var remoteProfileLinks: [AppProfileLinkConfig] = []
 
     private var screenWidth: CGFloat {
@@ -321,28 +315,7 @@ struct ProfileView: View {
     }
 
     private var iCloudSyncStatusRow: some View {
-        HStack(spacing: 12) {
-            settingsIcon(name: "icloud.fill", color: cloudSyncPreference ? Color.warmTeal : Color.gray)
-
-            Text(L10n.tr("账本 iCloud 同步"))
-                .font(.subheadline)
-
-            Spacer()
-
-            Toggle("", isOn: $cloudSyncPreference)
-                .labelsHidden()
-                .tint(Color.warmTeal)
-                .onChange(of: cloudSyncPreference) { newValue in
-                    UserDefaults.standard.set(newValue, forKey: Constants.ICloud.cloudSyncPreferenceKey)
-                    showCloudSyncRestartAlert = true
-                }
-        }
-        .padding(.vertical, 8)
-        .alert("重启生效", isPresented: $showCloudSyncRestartAlert) {
-            Button("好的") {}
-        } message: {
-            Text(cloudSyncPreference ? "iCloud 同步已开启，重启 App 后生效" : "iCloud 同步已关闭，重启 App 后生效")
-        }
+        CloudSyncSettingsView(monitor: PersistenceController.shared.cloudSync)
     }
 
     private func settingsIcon(name: String, color: Color) -> some View {

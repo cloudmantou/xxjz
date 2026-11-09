@@ -353,6 +353,27 @@ final class AutoBillLegacyIntentHandler: NSObject, AutoBillLegacyIntentHandling 
 
 @MainActor
 final class AssetLifeAppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        registerForCloudNotifications(application)
+        return true
+    }
+
+    func registerForCloudNotifications(_ application: UIApplication = .shared) {
+        guard PersistenceController.cloudRuntimeAvailable,
+              PersistenceController.shared.bookkeepingCloudSyncEnabled else { return }
+        // Silent CloudKit notifications do not require alert/badge/sound authorization.
+        application.registerForRemoteNotifications()
+        PersistenceController.shared.cloudSync.refreshAccountStatus()
+    }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        PersistenceController.shared.cloudSync.recordPushRegistration(error: nil)
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        PersistenceController.shared.cloudSync.recordPushRegistration(error: error)
+    }
+
     func application(
         _ application: UIApplication,
         configurationForConnecting connectingSceneSession: UISceneSession,
@@ -455,6 +476,7 @@ struct AssetLifeApp: App {
                     ScreenshotDetector.shared.recordBackgroundTime()
                 }
                 guard newPhase == .active else { return }
+                appDelegate.registerForCloudNotifications()
                 ensureScreenshotDetectionAuthorizationIfNeeded()
                 consumePendingShortcutAction()
                 checkForNewScreenshot()
