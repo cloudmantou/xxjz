@@ -28,6 +28,7 @@ struct LocalBackupPayload: Codable {
     var wishItems: [LocalBackupWishItem]
     var customCategories: [CustomCategory]
     var keywordRules: [KeywordRule]
+    var preferenceOperations: [PreferenceOperation]? = nil
 }
 
 struct LocalBackupTransaction: Codable {
@@ -172,7 +173,14 @@ final class LocalBackupService {
                 throw LocalBackupError.categoryStoreWriteFailed
             }
             categoriesReplaced = true
+            if PreferenceSyncCoordinator.shared.isConfigured && PreferenceSyncCoordinator.shared.owns(context) {
+                try context.performAndWait {
+                    try PreferenceSyncCoordinator.shared.stageRestore(categories: envelope.payload.customCategories,
+                        rules: envelope.payload.keywordRules, history: envelope.payload.preferenceOperations ?? [], in: context)
+                }
+            }
             try replaceCoreData(with: envelope.payload, in: context)
+            if PreferenceSyncCoordinator.shared.owns(context) { PreferenceSyncCoordinator.shared.refresh() }
         } catch {
             context.rollback()
             var rollbackFailed = false
@@ -293,7 +301,8 @@ final class LocalBackupService {
             assets: assets.sorted { $0.id.uuidString < $1.id.uuidString },
             wishItems: wishItems.sorted { $0.id.uuidString < $1.id.uuidString },
             customCategories: try CustomCategoryStore.shared.backupSnapshot().sorted { $0.id < $1.id },
-            keywordRules: try KeywordRulesTable.shared.fetchAllRulesStrict().sorted { $0.ruleId < $1.ruleId }
+            keywordRules: try KeywordRulesTable.shared.fetchAllRulesStrict().sorted { $0.ruleId < $1.ruleId },
+            preferenceOperations: try PreferenceSyncCoordinator.shared.backupHistory(in: context)
         )
     }
 
@@ -428,7 +437,9 @@ final class LocalBackupService {
     }
 
     private func validate(_ payload: LocalBackupPayload) throws {
-        guard Self.unique(payload.transactions.map(\.id)),
+        if let operations = payload.preferenceOperations { _ = try PreferenceJournal.resolve(operations) }
+        guard Self.unique(payload.keywordRules.compactMap(\.syncID)),
+              Self.unique(payload.transactions.map(\.id)),
               Self.unique(payload.budgets.map(\.id)),
               Self.unique(payload.assets.map(\.id)),
               Self.unique(payload.wishItems.map(\.id)),

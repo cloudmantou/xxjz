@@ -6,6 +6,7 @@ struct CustomCategoryFormView: View {
     let isIncome: Bool
     let existingCategory: CustomCategory?
 
+    @State private var saveError: String?
     @State private var name = ""
     @State private var selectedEmoji = "📝"
     @State private var selectedColorIndex = 0
@@ -98,6 +99,7 @@ struct CustomCategoryFormView: View {
                 }
             }
         }
+        .persistenceSaveErrorAlert($saveError)
     }
 
     // MARK: - Preview
@@ -232,10 +234,10 @@ struct CustomCategoryFormView: View {
             isIncome: isIncome
         )
 
-        if existingCategory != nil {
-            store.update(category)
-        } else {
-            store.add(category)
+        let saved = existingCategory != nil ? store.update(category) : store.add(category)
+        guard saved else {
+            saveError = PreferenceSyncCoordinator.shared.errorMessage ?? "分类保存失败，请重试。"
+            return
         }
         dismiss()
     }

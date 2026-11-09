@@ -279,7 +279,7 @@ final class ImportExportService: ObservableObject {
                 colorHex: isIncome ? "FFF8E1" : "F5F5F5",
                 isIncome: isIncome
             )
-            CustomCategoryStore.shared.add(customCategory)
+            guard CustomCategoryStore.shared.add(customCategory) else { continue }
             createdMappings[name] = customCategory.categoryKey
         }
 

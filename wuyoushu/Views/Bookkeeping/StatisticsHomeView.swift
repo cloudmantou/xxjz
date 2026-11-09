@@ -25,6 +25,7 @@ private enum StatisticsRankType: String, CaseIterable, Identifiable {
 }
 
 struct StatisticsHomeView: View {
+    @ObservedObject private var syncedCategories = CustomCategoryStore.shared
     @Environment(\.bottomBarInset) private var bottomBarInset: CGFloat
     @Environment(\.managedObjectContext) private var viewContext
     @StateObject private var viewModel = BookkeepingViewModel()

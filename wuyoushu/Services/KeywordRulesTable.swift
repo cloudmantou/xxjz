@@ -15,6 +15,7 @@ final class KeywordRulesTable {
     // Column definitions (matching AChai's schema)
     // NOTE: avoid `literal:` here; quoted identifiers from SQLite metadata can mismatch and
     // trigger "No such column" at row decoding time in some existing local DBs.
+    private let colSyncID = SQLite.Expression<String?>("syncID")
     private let colRuleId = SQLite.Expression<Int64>("ruleId")
     private let colKeyWord = SQLite.Expression<String?>("keyWord")
     private let colMemberId = SQLite.Expression<String?>("memberId")
@@ -47,10 +48,15 @@ final class KeywordRulesTable {
 
     // MARK: - Initialization
 
+    private let mutationLock = NSRecursiveLock()
     private var db: Connection?
 
-    private init() {
-        setupDatabase()
+    private init() { setupDatabase() }
+
+    init(databaseURL: URL) throws {
+        db = try Connection(databaseURL.path)
+        createTableIfNeeded()
+        guard db != nil else { throw KeywordRulesTableError.unavailable }
     }
 
     private func setupDatabase() {
@@ -101,6 +107,9 @@ final class KeywordRulesTable {
                 t.column(stColSubCandidateType, defaultValue: 0)
             })
 
+            let columns = try db.prepare("PRAGMA table_info(keywordRules)").compactMap { $0[1] as? String }
+            if !columns.contains("syncID") { try db.run(table.addColumn(colSyncID)) }
+
             // Create indexes for common queries
             try db.run(table.createIndex(colKeyWord, ifNotExists: true))
             try db.run(table.createIndex(colMemberId, ifNotExists: true))
@@ -111,6 +120,7 @@ final class KeywordRulesTable {
             try db.run(searchTextTable.createIndex(stColRuleId, ifNotExists: true))
             try db.run(searchTextTable.createIndex(stColIndex, ifNotExists: true))
         } catch {
+            self.db = nil
             print("[KeywordRulesTable] Table creation failed: \(error)")
         }
     }
@@ -120,12 +130,14 @@ final class KeywordRulesTable {
     /// Insert or replace a rule
     @discardableResult
     func upsertRule(_ rule: KeywordRule) -> Bool {
+        mutationLock.lock(); defer { mutationLock.unlock() }
         guard let db = db else { return false }
 
         do {
             try db.transaction {
                 let insert = table.insert(or: .replace,
                     colRuleId <- Int64(rule.ruleId),
+                    colSyncID <- rule.syncID,
                     colKeyWord <- rule.keyWord,
                     colMemberId <- rule.memberId,
                     colType <- Int64(rule.type.rawValue),
@@ -152,13 +164,24 @@ final class KeywordRulesTable {
     /// Batch insert rules (for API sync)
     @discardableResult
     func upsertRules(_ rules: [KeywordRule]) -> Bool {
+        mutationLock.lock(); defer { mutationLock.unlock() }
         guard let db = db else { return false }
 
         do {
             try db.transaction {
                 for rule in rules {
+                    if rule.searchTexts?.first?.ruleKind != .local,
+                       let old = try db.pluck(table.filter(colRuleId == Int64(rule.ruleId))),
+                       try old[colSyncID] != nil || (db.scalar(searchTextTable.filter(stColRuleId == Int64(rule.ruleId) && stColRuleKind == Int64(RuleKind.local.rawValue)).count)) > 0 {
+                        let occupied = Set(try db.prepare(table).map { $0[colRuleId] })
+                        var newID: Int64 = 1_000_000
+                        while occupied.contains(newID) { newID += 1 }
+                        try db.run(table.filter(colRuleId == Int64(rule.ruleId)).update(colRuleId <- newID))
+                        try db.run(searchTextTable.filter(stColRuleId == Int64(rule.ruleId)).update(stColRuleId <- newID))
+                    }
                     let insert = table.insert(or: .replace,
                         colRuleId <- Int64(rule.ruleId),
+                        colSyncID <- rule.syncID,
                         colKeyWord <- rule.keyWord,
                         colMemberId <- rule.memberId,
                         colType <- Int64(rule.type.rawValue),
@@ -185,6 +208,7 @@ final class KeywordRulesTable {
 
     @discardableResult
     func replaceAllRules(_ rules: [KeywordRule]) -> Bool {
+        mutationLock.lock(); defer { mutationLock.unlock() }
         guard let db = db else { return false }
 
         do {
@@ -194,6 +218,7 @@ final class KeywordRulesTable {
                 for rule in rules {
                     let insert = table.insert(or: .replace,
                         colRuleId <- Int64(rule.ruleId),
+                        colSyncID <- rule.syncID,
                         colKeyWord <- rule.keyWord,
                         colMemberId <- rule.memberId,
                         colType <- Int64(rule.type.rawValue),
@@ -218,9 +243,34 @@ final class KeywordRulesTable {
         }
     }
 
+    func replaceLocalRules(_ rules: [KeywordRule]) throws {
+        mutationLock.lock(); defer { mutationLock.unlock() }
+        guard db != nil else { throw KeywordRulesTableError.unavailable }
+        guard Set(rules.compactMap(\.syncID)).count == rules.count else { throw KeywordRulesTableError.unavailable }
+        let existing = try fetchAllRulesStrict()
+        let package = existing.filter { $0.searchTexts?.first?.ruleKind != .local }
+        let local = existing.filter { $0.searchTexts?.first?.ruleKind == .local }
+        var used = Set(package.map(\.ruleId))
+        var projected: [KeywordRule] = []
+        for var rule in rules.sorted(by: { ($0.syncID ?? "") < ($1.syncID ?? "") }) {
+            guard let identity = rule.syncID, !identity.isEmpty else { throw KeywordRulesTableError.unavailable }
+            var id = local.first { $0.syncID == identity }?.ruleId ?? rule.ruleId
+            if id <= 0 || used.contains(id) {
+                id = 1_000_000
+                while used.contains(id) { id += 1 }
+            }
+            used.insert(id)
+            rule.ruleId = id
+            rule.searchTexts = rule.searchTexts?.map { var text = $0; text.ruleId = id; return text }
+            projected.append(rule)
+        }
+        guard replaceAllRules(package + projected) else { throw KeywordRulesTableError.unavailable }
+    }
+
     /// Delete a single rule and all of its search-text rows atomically.
     @discardableResult
     func deleteRule(byId ruleId: Int) -> Bool {
+        mutationLock.lock(); defer { mutationLock.unlock() }
         guard let db = db else { return false }
 
         do {
@@ -327,6 +377,7 @@ final class KeywordRulesTable {
     }
 
     func fetchAllRulesStrict() throws -> [KeywordRule] {
+        mutationLock.lock(); defer { mutationLock.unlock() }
         guard let db else { throw KeywordRulesTableError.unavailable }
         let query = table.order(colKeyWordSource.asc, colRuleId.asc)
         let rules = try db.prepare(query).map(rowToKeywordRule)
@@ -440,7 +491,8 @@ final class KeywordRulesTable {
             memberTagIds: row[colMemberTagIds],
             createDate: row[colCreateDate],
             updateDate: row[colUpdateDate],
-            searchTexts: nil
+            searchTexts: nil,
+            syncID: row[colSyncID]
         )
     }
 

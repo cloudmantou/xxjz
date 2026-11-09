@@ -32,11 +32,17 @@ struct CustomCategory: Identifiable, Codable, Hashable {
 class CustomCategoryStore: ObservableObject {
     static let shared = CustomCategoryStore()
 
-    @Published var categories: [CustomCategory] = []
+    @Published private(set) var categories: [CustomCategory] = []
+
+    private var historical: [CustomCategory] = []
+    private let defaults: UserDefaults
+    private let usesSync: Bool
 
     private let storageKey = "custom_bookkeeping_categories"
 
-    private init() {
+    init(defaults: UserDefaults = .standard, usesSync: Bool = true) {
+        self.defaults = defaults
+        self.usesSync = usesSync
         load()
     }
 
@@ -48,51 +54,53 @@ class CustomCategoryStore: ObservableObject {
         categories.filter { $0.isIncome }
     }
 
-    func add(_ category: CustomCategory) {
-        categories.append(category)
-        save()
+    @discardableResult
+    func add(_ category: CustomCategory) -> Bool {
+        if usesSync && PreferenceSyncCoordinator.shared.isConfigured { return PreferenceSyncCoordinator.shared.saveCategory(category) }
+        return replaceAll(categories.filter { $0.id != category.id } + [category])
     }
 
-    func update(_ category: CustomCategory) {
-        if let index = categories.firstIndex(where: { $0.id == category.id }) {
-            categories[index] = category
-            save()
+    @discardableResult
+    func update(_ category: CustomCategory) -> Bool { add(category) }
+
+    @discardableResult
+    func delete(_ category: CustomCategory) -> Bool {
+        if usesSync && PreferenceSyncCoordinator.shared.isConfigured { return PreferenceSyncCoordinator.shared.deleteCategory(category) }
+        return replaceAll(categories.filter { $0.id != category.id })
+    }
+
+    @discardableResult
+    func applyProjection(_ replacements: [CustomCategory], historical: [CustomCategory]) -> Bool {
+        guard replaceAll(replacements) else { return false }
+        if self.historical != historical {
+            objectWillChange.send()
+            self.historical = historical
         }
-    }
-
-    func delete(_ category: CustomCategory) {
-        categories.removeAll { $0.id == category.id }
-        save()
+        return true
     }
 
     /// Replaces all custom categories only after their encoded snapshot is durable.
     @discardableResult
     func replaceAll(_ replacements: [CustomCategory]) -> Bool {
         guard let data = try? JSONEncoder().encode(replacements) else { return false }
-        UserDefaults.standard.set(data, forKey: storageKey)
-        categories = replacements
+        defaults.set(data, forKey: storageKey)
+        if categories != replacements { categories = replacements }
         return true
     }
 
     func backupSnapshot() throws -> [CustomCategory] {
-        guard let data = UserDefaults.standard.data(forKey: storageKey) else { return categories }
+        guard let data = defaults.data(forKey: storageKey) else { return categories }
         return try JSONDecoder().decode([CustomCategory].self, from: data)
     }
 
     func find(key: String) -> CustomCategory? {
         guard key.hasPrefix("custom_") else { return nil }
         let id = String(key.dropFirst("custom_".count))
-        return categories.first { $0.id == id }
-    }
-
-    private func save() {
-        if let data = try? JSONEncoder().encode(categories) {
-            UserDefaults.standard.set(data, forKey: storageKey)
-        }
+        return categories.first { $0.id == id } ?? historical.first { $0.id == id }
     }
 
     private func load() {
-        guard let data = UserDefaults.standard.data(forKey: storageKey),
+        guard let data = defaults.data(forKey: storageKey),
               let decoded = try? JSONDecoder().decode([CustomCategory].self, from: data) else {
             return
         }

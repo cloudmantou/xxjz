@@ -423,6 +423,9 @@ struct AssetLifeApp: App {
     init() {
         // Install or recover the packaged rule set before the UI can start an OCR workflow.
         _ = RuleUpdateService.shared.ensureLocalRulesAvailable()
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            PreferenceSyncCoordinator.shared.start(container: PersistenceController.shared.container)
+        }
     }
 
     struct ScreenshotBannerData {
@@ -476,6 +479,7 @@ struct AssetLifeApp: App {
                     ScreenshotDetector.shared.recordBackgroundTime()
                 }
                 guard newPhase == .active else { return }
+                PreferenceSyncCoordinator.shared.refresh()
                 appDelegate.registerForCloudNotifications()
                 ensureScreenshotDetectionAuthorizationIfNeeded()
                 consumePendingShortcutAction()

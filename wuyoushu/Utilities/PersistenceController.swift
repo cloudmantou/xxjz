@@ -191,6 +191,10 @@ final class PersistenceController: ObservableObject {
         loadFailure = loaded.error?.localizedDescription
         configureViewContext(container)
         cloudSync.configure(requested: requested, enabled: loaded.cloudSyncEnabled, storeError: loaded.cloudError)
+        if loadFailure == nil && PreferenceSyncCoordinator.shared.isConfigured {
+            PreferenceSyncCoordinator.shared.start(container: container)
+        }
+
     }
 
     private func configureViewContext(_ container: NSPersistentCloudKitContainer) {
@@ -206,6 +210,10 @@ final class PersistenceController: ObservableObject {
         monitor: CloudSyncMonitor
     ) -> (container: NSPersistentCloudKitContainer, cloudSyncEnabled: Bool, error: Error?, cloudError: Error?) {
         var container = NSPersistentCloudKitContainer(name: "AssetLife", managedObjectModel: model)
+        if !inMemory {
+            do { try backupBeforePreferenceMigration(storeURL: storeURL, model: model) }
+            catch { return (container, false, error, nil) }
+        }
         container.persistentStoreDescriptions = [
             makeStoreDescription(
                 storeURL: storeURL,
@@ -247,6 +255,23 @@ final class PersistenceController: ObservableObject {
         }
 
         return (container, cloudSyncRequested && !inMemory, nil, nil)
+    }
+
+    /// Back up the unopened SQLite store through Core Data so WAL and external blobs
+    /// are included. A backup failure blocks migration instead of risking the original.
+    static func backupBeforePreferenceMigration(storeURL: URL, model: NSManagedObjectModel) throws {
+        guard FileManager.default.fileExists(atPath: storeURL.path) else { return }
+        let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: storeURL)
+        guard !model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) else { return }
+        guard let legacyURL = Bundle.main.url(forResource: "AssetLifeLegacyV1", withExtension: "mom"),
+              let legacy = NSManagedObjectModel(contentsOf: legacyURL),
+              legacy.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) else { return }
+        let directory = storeURL.deletingLastPathComponent().appendingPathComponent("BeforePreferenceSync-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let backupURL = directory.appendingPathComponent("AssetLife.sqlite")
+        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: legacy)
+        try coordinator.replacePersistentStore(at: backupURL, destinationOptions: nil,
+            withPersistentStoreFrom: storeURL, sourceOptions: [NSReadOnlyPersistentStoreOption: true], ofType: NSSQLiteStoreType)
     }
 
     static func makeStoreDescription(
@@ -298,7 +323,7 @@ final class PersistenceController: ObservableObject {
         return loadError
     }
 
-    private static func makeModel(enableUniqueConstraints: Bool) -> NSManagedObjectModel {
+    static func makeModel(enableUniqueConstraints: Bool, includeSyncedPreferences: Bool = true) -> NSManagedObjectModel {
         let model = NSManagedObjectModel()
 
         let assetEntity = NSEntityDescription()
@@ -527,6 +552,16 @@ final class PersistenceController: ObservableObject {
             budgetEntity
         ]
 
+        if includeSyncedPreferences {
+            let operation = NSEntityDescription()
+            operation.name = "SyncedPreferenceOperation"
+            operation.managedObjectClassName = "NSManagedObject"
+            operation.properties = [
+                attribute("operationID", .stringAttributeType),
+                binaryAttribute("encodedOperation", optional: true)
+            ]
+            model.entities.append(operation)
+        }
         return model
     }
 

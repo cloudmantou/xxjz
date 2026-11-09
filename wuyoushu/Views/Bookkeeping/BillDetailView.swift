@@ -6,6 +6,7 @@ import CoreData
 /// 支持删除和退款（按原单方向反向冲销）
 @MainActor
 struct BillDetailView: View {
+    @ObservedObject private var syncedCategories = CustomCategoryStore.shared
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var viewContext
 
