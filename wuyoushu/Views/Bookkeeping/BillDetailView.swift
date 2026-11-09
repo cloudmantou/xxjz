@@ -404,7 +404,7 @@ struct BillDetailView: View {
 
     private func loadTransaction() {
         do {
-            guard let fetched = try viewContext.existingObject(with: transactionID) as? BookkeepingTransaction else {
+            guard let fetched = try viewContext.existingObject(with: transactionID) as? BookkeepingTransaction, !fetched.isTrashed else {
                 transaction = nil
                 return
             }
@@ -460,7 +460,7 @@ struct BillDetailView: View {
         guard !isCommitting else { return }
 
         isCommitting = true
-        viewContext.delete(transaction)
+        transaction.isTrashed = true
 
         if let error = PersistenceSaveCoordinator.save(viewContext) {
             saveErrorMessage = error
@@ -479,7 +479,7 @@ struct BillDetailView: View {
 
         let originalID = transaction.id.uuidString
         let reversedIncome = !transaction.isIncome
-        _ = BookkeepingTransaction(
+        let refund = BookkeepingTransaction(
             context: viewContext,
             amount: transaction.normalizedAmount,
             categoryKey: transaction.categoryKey,
@@ -491,6 +491,8 @@ struct BillDetailView: View {
             billSource: "refund_of:\(originalID)",
             merchantName: transaction.merchantName
         )
+        refund.ledgerRaw = transaction.ledgerRaw
+        if let store = transaction.objectID.persistentStore { viewContext.assign(refund, to: store) }
 
         if let error = PersistenceSaveCoordinator.save(viewContext) {
             saveErrorMessage = error

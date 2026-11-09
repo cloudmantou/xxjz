@@ -29,6 +29,30 @@ struct LocalBackupPayload: Codable {
     var customCategories: [CustomCategory]
     var keywordRules: [KeywordRule]
     var preferenceOperations: [PreferenceOperation]? = nil
+    var ledgers: [LocalBackupLedger]? = nil
+    var ledgerActivities: [LocalBackupLedgerActivity]? = nil
+}
+
+struct LocalBackupLedger: Codable {
+    var id: UUID
+    var name: String
+    var emoji: String
+    var currencyCode: String
+    var createdAt: Date
+    var archived: Bool
+    var targetCents: Int64
+    var targetDate: Date?
+    var wasShared: Bool
+}
+
+struct LocalBackupLedgerActivity: Codable {
+    var id: UUID
+    var ledgerID: UUID
+    var targetID: UUID
+    var date: Date
+    var author: String
+    var action: String
+    var snapshot: Data?
 }
 
 struct LocalBackupTransaction: Codable {
@@ -45,6 +69,11 @@ struct LocalBackupTransaction: Codable {
     var billSource: String?
     var merchantName: String?
     var importFingerprint: String?
+    var ledgerID: UUID? = nil
+    var creatorName: String? = nil
+    var categoryNameSnapshot: String? = nil
+    var categoryEmojiSnapshot: String? = nil
+    var isTrashed: Bool? = nil
 }
 
 struct LocalBackupBudget: Codable {
@@ -53,6 +82,8 @@ struct LocalBackupBudget: Codable {
     var monthlyAmount: Double
     var month: Date
     var createdAt: Date
+    var ledgerID: UUID? = nil
+    var isTrashed: Bool? = nil
 }
 
 struct LocalBackupAsset: Codable {
@@ -123,7 +154,13 @@ struct LocalBackupWishPriceHistory: Codable {
 @MainActor
 final class LocalBackupService {
     static let shared = LocalBackupService()
-    static let currentFormatVersion = 1
+    static let currentFormatVersion = 2
+    static var recoveryDirectory: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("BeforeBackupRestore", isDirectory: true)
+    }
+    private let ledgerStore: LedgerStore
+    init(ledgerStore: LedgerStore = .shared) { self.ledgerStore = ledgerStore }
 
     func exportBackup(from context: NSManagedObjectContext) throws -> Data {
         let payload = try capturePayload(from: context)
@@ -140,7 +177,7 @@ final class LocalBackupService {
 
     func decodeAndValidate(_ data: Data) throws -> LocalBackupEnvelope {
         let envelope = try Self.decoder().decode(LocalBackupEnvelope.self, from: data)
-        guard envelope.formatVersion == Self.currentFormatVersion else {
+        guard [1, Self.currentFormatVersion].contains(envelope.formatVersion) else {
             throw LocalBackupError.unsupportedVersion(envelope.formatVersion)
         }
         let actualChecksum = Self.sha256(try Self.encoder().encode(envelope.payload))
@@ -152,7 +189,7 @@ final class LocalBackupService {
     }
 
     func restore(_ envelope: LocalBackupEnvelope, into context: NSManagedObjectContext) throws {
-        guard envelope.formatVersion == Self.currentFormatVersion else {
+        guard [1, Self.currentFormatVersion].contains(envelope.formatVersion) else {
             throw LocalBackupError.unsupportedVersion(envelope.formatVersion)
         }
         let actualChecksum = Self.sha256(try Self.encoder().encode(envelope.payload))
@@ -161,6 +198,12 @@ final class LocalBackupService {
         }
         try validate(envelope.payload)
 
+        guard !context.hasChanges else { throw LedgerError.unavailable }
+        // Write a complete recovery point before touching either Core Data or preference caches.
+        let safetyData = try exportBackup(from: context)
+        try FileManager.default.createDirectory(at: Self.recoveryDirectory, withIntermediateDirectories: true)
+        try safetyData.write(to: Self.recoveryDirectory.appendingPathComponent(UUID().uuidString + ".json"),
+            options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         let previousPayload = try capturePayload(from: context)
         var rulesReplaced = false
         var categoriesReplaced = false
@@ -181,6 +224,7 @@ final class LocalBackupService {
             }
             try replaceCoreData(with: envelope.payload, in: context)
             if PreferenceSyncCoordinator.shared.owns(context) { PreferenceSyncCoordinator.shared.refresh() }
+            if ledgerStore.owns(context) { ledgerStore.refresh() }
         } catch {
             context.rollback()
             var rollbackFailed = false
@@ -202,10 +246,27 @@ final class LocalBackupService {
         var budgets: [LocalBackupBudget] = []
         var assets: [LocalBackupAsset] = []
         var wishItems: [LocalBackupWishItem] = []
+        var ledgerSnapshots: [LocalBackupLedger] = []
+        var activities: [LocalBackupLedgerActivity] = []
 
         try context.performAndWait {
+            let protected = Set(try ledgerStore.protectedLedgers(in: context).map(\.objectID))
+            var seenLedgerIDs: Set<UUID> = []
+            ledgerSnapshots = try context.fetch(Ledger.fetchRequest()).compactMap { ledger in
+                if ledger.isPersonalDefault && seenLedgerIDs.contains(ledger.id) { return nil }
+                seenLedgerIDs.insert(ledger.id)
+                return LocalBackupLedger(id: ledger.id, name: ledger.name, emoji: ledger.emoji,
+                    currencyCode: ledger.currencyCode, createdAt: ledger.createdAt, archived: ledger.archived,
+                    targetCents: ledger.targetCents, targetDate: ledger.targetDate, wasShared: protected.contains(ledger.objectID))
+            }
+            activities = try context.fetch(LedgerActivity.fetchRequest()).map { activity in
+                guard let ledger = activity.ledgerRaw else { throw LedgerError.unavailable }
+                return LocalBackupLedgerActivity(id: activity.id, ledgerID: ledger.id, targetID: activity.targetID,
+                    date: activity.date, author: activity.author, action: activity.action, snapshot: activity.snapshot)
+            }
             transactions = try context.fetch(BookkeepingTransaction.fetchRequest()).map {
-                LocalBackupTransaction(
+                guard $0.objectID.persistentStore?.configurationName != "Shared" || $0.ledgerRaw != nil else { throw LedgerError.unavailable }
+                return LocalBackupTransaction(
                     id: $0.id,
                     amount: $0.amount,
                     categoryKey: $0.categoryKey,
@@ -218,16 +279,24 @@ final class LocalBackupService {
                     notInBudget: $0.notInBudget,
                     billSource: $0.billSource,
                     merchantName: $0.merchantName,
-                    importFingerprint: $0.importFingerprint
+                    importFingerprint: $0.importFingerprint,
+                    ledgerID: $0.ledgerRaw?.id,
+                    creatorName: $0.creatorName,
+                    categoryNameSnapshot: $0.categoryNameSnapshot,
+                    categoryEmojiSnapshot: $0.categoryEmojiSnapshot,
+                    isTrashed: $0.isTrashed
                 )
             }
             budgets = try context.fetch(BudgetEntry.fetchRequest()).map {
-                LocalBackupBudget(
+                guard $0.objectID.persistentStore?.configurationName != "Shared" || $0.ledgerRaw != nil else { throw LedgerError.unavailable }
+                return LocalBackupBudget(
                     id: $0.id,
                     categoryKey: $0.categoryKey,
                     monthlyAmount: $0.monthlyAmount,
                     month: $0.month,
-                    createdAt: $0.createdAt
+                    createdAt: $0.createdAt,
+                    ledgerID: $0.ledgerRaw?.id,
+                    isTrashed: $0.isTrashed
                 )
             }
             assets = try context.fetch(AssetItem.fetchRequest()).map { asset in
@@ -302,26 +371,57 @@ final class LocalBackupService {
             wishItems: wishItems.sorted { $0.id.uuidString < $1.id.uuidString },
             customCategories: try CustomCategoryStore.shared.backupSnapshot().sorted { $0.id < $1.id },
             keywordRules: try KeywordRulesTable.shared.fetchAllRulesStrict().sorted { $0.ruleId < $1.ruleId },
-            preferenceOperations: try PreferenceSyncCoordinator.shared.backupHistory(in: context)
+            preferenceOperations: try PreferenceSyncCoordinator.shared.backupHistory(in: context),
+            ledgers: ledgerSnapshots.sorted { $0.id.uuidString < $1.id.uuidString },
+            ledgerActivities: activities.sorted { $0.id.uuidString < $1.id.uuidString }
         )
     }
 
     private func replaceCoreData(with payload: LocalBackupPayload, in context: NSManagedObjectContext) throws {
         try context.performAndWait {
+            guard let personalStore = context.persistentStoreCoordinator?.persistentStores.first(where: { $0.configurationName != "Shared" }) else { throw LedgerError.unavailable }
+            let protected = try ledgerStore.protectedLedgers(in: context)
+            let protectedIDs = Set(protected.map(\.id))
             for entityName in [
                 "AssetExtraCost", "AssetSaleRecord",
                 "WishlistPlatformPrice", "WishlistPriceHistory",
                 "AssetItem", "WishlistItem",
-                "BookkeepingTransaction", "BudgetEntry"
+                "BookkeepingTransaction", "BudgetEntry", "LedgerActivity", "Ledger"
             ] {
                 let request = NSFetchRequest<NSManagedObject>(entityName: entityName)
+                request.affectedStores = [personalStore]
+                if !protected.isEmpty {
+                    if entityName == "Ledger" { request.predicate = NSPredicate(format: "NOT (SELF IN %@)", protected) }
+                    else if ["BookkeepingTransaction", "BudgetEntry", "LedgerActivity"].contains(entityName) {
+                        request.predicate = NSPredicate(format: "ledgerRaw == nil OR NOT (ledgerRaw IN %@)", protected)
+                    }
+                }
                 for object in try context.fetch(request) {
                     context.delete(object)
                 }
             }
 
+            var ledgerMap: [UUID: Ledger] = [:]
+            var copyIDs: Set<UUID> = []
+            for item in payload.ledgers ?? [] {
+                let copy = item.wasShared || protectedIDs.contains(item.id)
+                let ledger = Ledger(context: context); context.assign(ledger, to: personalStore)
+                ledger.id = copy ? UUID() : item.id
+                ledger.name = copy ? String(item.name.prefix(30)) + "（备份副本）" : item.name
+                ledger.emoji = item.emoji; ledger.currencyCode = item.currencyCode; ledger.createdAt = item.createdAt
+                ledger.archived = item.archived; ledger.targetCents = item.targetCents; ledger.targetDate = item.targetDate
+                ledgerMap[item.id] = ledger
+                if copy { copyIDs.insert(item.id) }
+            }
+            if ledgerMap[Ledger.personalID] == nil {
+                let personal = Ledger(context: context); context.assign(personal, to: personalStore)
+                personal.id = Ledger.personalID; personal.name = "个人账本"; personal.emoji = "📒"
+                personal.currencyCode = "CNY"; personal.createdAt = Date(timeIntervalSince1970: 0)
+                ledgerMap[Ledger.personalID] = personal
+            }
+            var transactionIDMap: [UUID: UUID] = [:]
             for item in payload.transactions {
-                _ = BookkeepingTransaction(
+                let transaction = BookkeepingTransaction(
                     context: context,
                     id: item.id,
                     amount: item.amount,
@@ -337,9 +437,19 @@ final class LocalBackupService {
                     merchantName: item.merchantName,
                     importFingerprint: item.importFingerprint
                 )
+                context.assign(transaction, to: personalStore)
+                let sourceLedgerID = item.ledgerID ?? Ledger.personalID
+                guard let ledger = ledgerMap[sourceLedgerID] else { throw LedgerError.unavailable }
+                transaction.ledgerRaw = ledger
+                if copyIDs.contains(sourceLedgerID) { transaction.id = UUID() }
+                transactionIDMap[item.id] = transaction.id
+                transaction.creatorName = item.creatorName ?? ""
+                transaction.categoryNameSnapshot = item.categoryNameSnapshot
+                transaction.categoryEmojiSnapshot = item.categoryEmojiSnapshot
+                transaction.isTrashed = item.isTrashed ?? false
             }
             for item in payload.budgets {
-                _ = BudgetEntry(
+                let budget = BudgetEntry(
                     context: context,
                     id: item.id,
                     categoryKey: item.categoryKey,
@@ -347,6 +457,23 @@ final class LocalBackupService {
                     month: item.month,
                     createdAt: item.createdAt
                 )
+                context.assign(budget, to: personalStore)
+                let sourceLedgerID = item.ledgerID ?? Ledger.personalID
+                guard let ledger = ledgerMap[sourceLedgerID] else { throw LedgerError.unavailable }
+                budget.ledgerRaw = ledger
+                budget.isTrashed = item.isTrashed ?? false
+                if copyIDs.contains(sourceLedgerID) { budget.id = UUID() }
+            }
+            for item in payload.ledgerActivities ?? [] {
+                guard let ledger = ledgerMap[item.ledgerID] else { throw LedgerError.unavailable }
+                let activity = LedgerActivity(context: context); context.assign(activity, to: personalStore)
+                activity.id = copyIDs.contains(item.ledgerID) ? UUID() : item.id
+                activity.ledgerRaw = ledger; activity.targetID = transactionIDMap[item.targetID] ?? item.targetID
+                activity.date = item.date; activity.author = item.author; activity.action = item.action
+                if let data = item.snapshot, var snapshot = try? JSONDecoder().decode(LedgerRevision.self, from: data) {
+                    snapshot.id = transactionIDMap[snapshot.id] ?? snapshot.id
+                    activity.snapshot = try JSONEncoder().encode(snapshot)
+                } else { activity.snapshot = item.snapshot }
             }
 
             var assetsByID: [UUID: AssetItem] = [:]
@@ -438,7 +565,13 @@ final class LocalBackupService {
 
     private func validate(_ payload: LocalBackupPayload) throws {
         if let operations = payload.preferenceOperations { _ = try PreferenceJournal.resolve(operations) }
-        guard Self.unique(payload.keywordRules.compactMap(\.syncID)),
+        let ledgerIDs = Set((payload.ledgers ?? []).map(\.id)).union([Ledger.personalID])
+        guard payload.transactions.allSatisfy({ ledgerIDs.contains($0.ledgerID ?? Ledger.personalID) && $0.amount.isFinite }),
+              payload.budgets.allSatisfy({ ledgerIDs.contains($0.ledgerID ?? Ledger.personalID) && $0.monthlyAmount.isFinite }),
+              (payload.ledgerActivities ?? []).allSatisfy({ ledgerIDs.contains($0.ledgerID) }) else { throw LedgerError.unavailable }
+        guard Self.unique((payload.ledgers ?? []).map(\.id)),
+              Self.unique((payload.ledgerActivities ?? []).map(\.id)),
+              Self.unique(payload.keywordRules.compactMap(\.syncID)),
               Self.unique(payload.transactions.map(\.id)),
               Self.unique(payload.budgets.map(\.id)),
               Self.unique(payload.assets.map(\.id)),

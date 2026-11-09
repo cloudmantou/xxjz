@@ -14,6 +14,7 @@ enum PersistenceSaveCoordinator {
 
     static func save(_ context: NSManagedObjectContext, operation: () throws -> Void) -> String? {
         do {
+            try LedgerStore.shared.prepareSave(context)
             try operation()
             return nil
         } catch {
@@ -192,6 +193,7 @@ final class PersistenceController: ObservableObject {
         configureViewContext(container)
         cloudSync.configure(requested: requested, enabled: loaded.cloudSyncEnabled, storeError: loaded.cloudError)
         if loadFailure == nil && PreferenceSyncCoordinator.shared.isConfigured {
+            LedgerStore.shared.start(container: container)
             PreferenceSyncCoordinator.shared.start(container: container)
         }
 
@@ -214,13 +216,7 @@ final class PersistenceController: ObservableObject {
             do { try backupBeforePreferenceMigration(storeURL: storeURL, model: model) }
             catch { return (container, false, error, nil) }
         }
-        container.persistentStoreDescriptions = [
-            makeStoreDescription(
-                storeURL: storeURL,
-                inMemory: inMemory,
-                cloudSyncEnabled: cloudSyncRequested
-            )
-        ]
+        container.persistentStoreDescriptions = makeLedgerStoreDescriptions(storeURL: storeURL, inMemory: inMemory, cloudSyncEnabled: cloudSyncRequested)
 
         if cloudSyncRequested { monitor.observe(container) }
         if let error = loadPersistentStoresSync(container: container) {
@@ -235,13 +231,7 @@ final class PersistenceController: ObservableObject {
             }
 
             container = NSPersistentCloudKitContainer(name: "AssetLife", managedObjectModel: model)
-            container.persistentStoreDescriptions = [
-                makeStoreDescription(
-                    storeURL: storeURL,
-                    inMemory: false,
-                    cloudSyncEnabled: false
-                )
-            ]
+            container.persistentStoreDescriptions = makeLedgerStoreDescriptions(storeURL: storeURL, inMemory: false, cloudSyncEnabled: false)
 
             if let fallbackError = loadPersistentStoresSync(container: container) {
                 let combinedError = NSError(
@@ -263,15 +253,27 @@ final class PersistenceController: ObservableObject {
         guard FileManager.default.fileExists(atPath: storeURL.path) else { return }
         let metadata = try NSPersistentStoreCoordinator.metadataForPersistentStore(ofType: NSSQLiteStoreType, at: storeURL)
         guard !model.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) else { return }
-        guard let legacyURL = Bundle.main.url(forResource: "AssetLifeLegacyV1", withExtension: "mom"),
-              let legacy = NSManagedObjectModel(contentsOf: legacyURL),
-              legacy.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) else { return }
+        let legacy = ["AssetLifeLegacyV2", "AssetLifeLegacyV1"].compactMap { name in
+            Bundle.main.url(forResource: name, withExtension: "mom").flatMap(NSManagedObjectModel.init(contentsOf:))
+        }.first { $0.isConfiguration(withName: nil, compatibleWithStoreMetadata: metadata) }
+        guard let legacy else { throw LedgerError.unavailable }
         let directory = storeURL.deletingLastPathComponent().appendingPathComponent("BeforePreferenceSync-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let backupURL = directory.appendingPathComponent("AssetLife.sqlite")
         let coordinator = NSPersistentStoreCoordinator(managedObjectModel: legacy)
         try coordinator.replacePersistentStore(at: backupURL, destinationOptions: nil,
             withPersistentStoreFrom: storeURL, sourceOptions: [NSReadOnlyPersistentStoreOption: true], ofType: NSSQLiteStoreType)
+    }
+
+    static func makeLedgerStoreDescriptions(storeURL: URL, inMemory: Bool, cloudSyncEnabled: Bool) -> [NSPersistentStoreDescription] {
+        let personal = makeStoreDescription(storeURL: storeURL, inMemory: inMemory, cloudSyncEnabled: cloudSyncEnabled)
+        personal.configuration = "Private"
+        if inMemory { return [personal] }
+        let sharedURL = storeURL.deletingLastPathComponent().appendingPathComponent("AssetLifeShared.sqlite")
+        let shared = makeStoreDescription(storeURL: sharedURL, inMemory: false, cloudSyncEnabled: cloudSyncEnabled)
+        shared.configuration = "Shared"
+        shared.cloudKitContainerOptions?.databaseScope = .shared
+        return [personal, shared]
     }
 
     static func makeStoreDescription(
@@ -312,18 +314,21 @@ final class PersistenceController: ObservableObject {
     }
 
     private static func loadPersistentStoresSync(container: NSPersistentCloudKitContainer) -> Error? {
-        let semaphore = DispatchSemaphore(value: 0)
+        let group = DispatchGroup()
+        let lock = NSLock()
         var loadError: Error?
-
+        for _ in container.persistentStoreDescriptions { group.enter() }
         container.loadPersistentStores { _, error in
-            loadError = error
-            semaphore.signal()
+            lock.lock()
+            if loadError == nil { loadError = error }
+            lock.unlock()
+            group.leave()
         }
-        semaphore.wait()
+        group.wait()
         return loadError
     }
 
-    static func makeModel(enableUniqueConstraints: Bool, includeSyncedPreferences: Bool = true) -> NSManagedObjectModel {
+    static func makeModel(enableUniqueConstraints: Bool, includeSyncedPreferences: Bool = true, includeLedgers: Bool = true) -> NSManagedObjectModel {
         let model = NSManagedObjectModel()
 
         let assetEntity = NSEntityDescription()
@@ -561,6 +566,40 @@ final class PersistenceController: ObservableObject {
                 binaryAttribute("encodedOperation", optional: true)
             ]
             model.entities.append(operation)
+        }
+        if includeLedgers {
+            let ledger = NSEntityDescription()
+            ledger.name = "Ledger"
+            ledger.managedObjectClassName = NSStringFromClass(Ledger.self)
+            ledger.properties = [
+                attribute("id", .UUIDAttributeType), attribute("name", .stringAttributeType),
+                attribute("emoji", .stringAttributeType), attribute("currencyCode", .stringAttributeType),
+                attribute("createdAt", .dateAttributeType), attribute("archived", .booleanAttributeType),
+                attribute("targetCents", .integer64AttributeType), attribute("targetDate", .dateAttributeType, optional: true)
+            ]
+            let activity = NSEntityDescription()
+            activity.name = "LedgerActivity"
+            activity.managedObjectClassName = NSStringFromClass(LedgerActivity.self)
+            activity.properties = [
+                attribute("id", .UUIDAttributeType), attribute("targetID", .UUIDAttributeType),
+                attribute("date", .dateAttributeType), attribute("author", .stringAttributeType),
+                attribute("action", .stringAttributeType), binaryAttribute("snapshot", optional: true)
+            ]
+            transactionEntity.properties += [
+                attribute("isTrashed", .booleanAttributeType), attribute("creatorName", .stringAttributeType),
+                attribute("categoryNameSnapshot", .stringAttributeType, optional: true),
+                attribute("categoryEmojiSnapshot", .stringAttributeType, optional: true)
+            ]
+            budgetEntity.properties.append(attribute("isTrashed", .booleanAttributeType))
+            for (child, inverseName) in [(transactionEntity, "transactionsRaw"), (budgetEntity, "budgetsRaw"), (activity, "activitiesRaw")] {
+                let parent = relationship(name: "ledgerRaw", destination: ledger, toMany: false, deleteRule: .nullifyDeleteRule, optional: true)
+                let children = relationship(name: inverseName, destination: child, toMany: true, deleteRule: .cascadeDeleteRule, optional: true)
+                parent.inverseRelationship = children; children.inverseRelationship = parent
+                child.properties.append(parent); ledger.properties.append(children)
+            }
+            model.entities += [ledger, activity]
+            model.setEntities(model.entities, forConfigurationName: "Private")
+            model.setEntities([ledger, transactionEntity, budgetEntity, activity], forConfigurationName: "Shared")
         }
         return model
     }

@@ -13,6 +13,8 @@ extension EnvironmentValues {
 }
 
 struct MainTabView: View {
+    @ObservedObject private var ledgerStore = LedgerStore.shared
+    @ObservedObject private var sharingService = LedgerSharingService.shared
     @EnvironmentObject private var router: AppRouter
     @State private var assetFormMode: AssetFormMode = .add
 
@@ -34,6 +36,7 @@ struct MainTabView: View {
 
             ZStack(alignment: .bottom) {
                 tabContent
+                    .id(ledgerStore.selectionToken)
                     .safeAreaInset(edge: .bottom) {
                         Color.clear
                             .frame(height: reservedBarHeight)
@@ -50,6 +53,12 @@ struct MainTabView: View {
                     )
                 }
             }
+            .overlay(alignment: .top) {
+                if sharingService.isAccepting { ProgressView("正在接受账本邀请…").padding().background(.regularMaterial).cornerRadius(12) }
+            }
+            .alert("iCloud 共享", isPresented: Binding(get: { sharingService.message != nil }, set: { if !$0 { sharingService.message = nil } })) {
+                Button("好") { sharingService.message = nil }
+            } message: { Text(sharingService.message ?? "") }
             .ignoresSafeArea(edges: .bottom)
             .onAppear {
                 if router.selectedTab == .quick {

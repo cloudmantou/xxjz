@@ -7,6 +7,8 @@ final class BudgetEntry: NSManagedObject, Identifiable {
         NSFetchRequest<BudgetEntry>(entityName: "BudgetEntry")
     }
 
+    @NSManaged var ledgerRaw: Ledger?
+    @NSManaged var isTrashed: Bool
     @NSManaged var id: UUID
     @NSManaged var categoryKey: String
     @NSManaged var monthlyAmount: Double

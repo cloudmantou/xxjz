@@ -46,7 +46,7 @@ struct PreferenceOperation: Codable, Equatable, Identifiable {
         try values.encode(parents, forKey: .parents)
         try values.encodeIfPresent(payload, forKey: .payload)
         try values.encode(isSeed, forKey: .isSeed)
-        // The surrounding backup encoder uses ISO-8601 without fractional seconds.
+        // An enclosing encoder may use ISO-8601 without fractional seconds.
         // Keep operation metadata lossless regardless of that encoder's date strategy.
         try values.encode(date.timeIntervalSinceReferenceDate, forKey: .date)
     }
@@ -192,7 +192,9 @@ final class PreferenceJournal {
     func operations(in suppliedContext: NSManagedObjectContext? = nil) throws -> [PreferenceOperation] {
         let target = suppliedContext ?? context
         return try target.performAndWait {
-            try target.fetch(NSFetchRequest<NSManagedObject>(entityName: Self.entityName)).map {
+            let request = NSFetchRequest<NSManagedObject>(entityName: Self.entityName)
+            request.affectedStores = self.container.persistentStoreCoordinator.persistentStores.filter { $0.configurationName != "Shared" }
+            return try target.fetch(request).map {
                 guard let data = $0.value(forKey: "encodedOperation") as? Data else { throw PreferenceSyncError.invalidData }
                 let op = try JSONDecoder().decode(PreferenceOperation.self, from: data)
                 guard op.id == $0.value(forKey: "operationID") as? String else { throw PreferenceSyncError.invalidData }
@@ -212,6 +214,7 @@ final class PreferenceJournal {
                 var ids = Set(existing.map(\.id))
                 for operation in operations where ids.insert(operation.id).inserted {
                     let row = NSEntityDescription.insertNewObject(forEntityName: Self.entityName, into: target)
+                    if let store = self.container.persistentStoreCoordinator.persistentStores.first(where: { $0.configurationName != "Shared" }) { target.assign(row, to: store) }
                     row.setValue(operation.id, forKey: "operationID")
                     row.setValue(try Self.encode(operation), forKey: "encodedOperation")
                 }

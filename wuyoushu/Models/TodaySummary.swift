@@ -4,4 +4,5 @@ struct TodaySummary: Codable {
     let totalExpense: Double
     let transactionCount: Int
     let dateString: String
+    var ledgerName: String? = nil
 }

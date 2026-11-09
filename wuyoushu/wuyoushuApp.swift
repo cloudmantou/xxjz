@@ -1,3 +1,4 @@
+import CloudKit
 import SwiftUI
 import UIKit
 import CoreData
@@ -198,9 +199,14 @@ final class AssetLifeSceneDelegate: UIResponder, UIWindowSceneDelegate {
         willConnectTo session: UISceneSession,
         options connectionOptions: UIScene.ConnectionOptions
     ) {
+        if let metadata = connectionOptions.cloudKitShareMetadata { LedgerSharingService.shared.accept(metadata) }
         for activity in connectionOptions.userActivities {
             _ = ShortcutUserActivityBridge.handle(activity, source: "SceneDelegate(willConnect)")
         }
+    }
+
+    func windowScene(_ windowScene: UIWindowScene, userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata) {
+        LedgerSharingService.shared.accept(cloudKitShareMetadata)
     }
 
     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
@@ -353,6 +359,10 @@ final class AutoBillLegacyIntentHandler: NSObject, AutoBillLegacyIntentHandling 
 
 @MainActor
 final class AssetLifeAppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata) {
+        LedgerSharingService.shared.accept(cloudKitShareMetadata)
+    }
+
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         registerForCloudNotifications(application)
         return true
@@ -424,6 +434,7 @@ struct AssetLifeApp: App {
         // Install or recover the packaged rule set before the UI can start an OCR workflow.
         _ = RuleUpdateService.shared.ensureLocalRulesAvailable()
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
+            LedgerStore.shared.start(container: PersistenceController.shared.container)
             PreferenceSyncCoordinator.shared.start(container: PersistenceController.shared.container)
         }
     }
@@ -467,6 +478,7 @@ struct AssetLifeApp: App {
                     AssetLifeShortcuts.updateAppShortcutParameters()
                     print("[Shortcuts] Registered \(AssetLifeShortcuts.appShortcuts.count) app shortcuts")
                 }
+                Task { await ICloudBackupService.shared.automaticBackupIfNeeded(from: PersistenceController.shared.container.viewContext) }
                 ensureScreenshotDetectionAuthorizationIfNeeded()
                 migrateLegacyShortcutDonationsIfNeeded()
                 donateLegacyActivitiesIfNeeded()
@@ -479,7 +491,9 @@ struct AssetLifeApp: App {
                     ScreenshotDetector.shared.recordBackgroundTime()
                 }
                 guard newPhase == .active else { return }
+                LedgerStore.shared.refresh()
                 PreferenceSyncCoordinator.shared.refresh()
+                Task { await ICloudBackupService.shared.automaticBackupIfNeeded(from: PersistenceController.shared.container.viewContext) }
                 appDelegate.registerForCloudNotifications()
                 ensureScreenshotDetectionAuthorizationIfNeeded()
                 consumePendingShortcutAction()
