@@ -128,7 +128,7 @@ extension PreferenceSyncTests {
     func test_duplicateCloudRows_areIdempotentButConflictingIDsAreRejected() throws {
         let initial = try seed()
         XCTAssertEqual(try PreferenceJournal.resolve([initial, initial]).first?.history.count, 1)
-        var corrupt = initial; corrupt.date = .distantFuture
+        var corrupt = initial; corrupt.payload = try PreferenceJournal.encode(category("冲突内容"))
         XCTAssertThrowsError(try PreferenceJournal.resolve([initial, corrupt]))
     }
     func test_legacyRulesWithSameIntegerID_getDifferentGlobalIdentities() throws {
@@ -364,5 +364,24 @@ extension PreferenceSyncTests {
         let state = try XCTUnwrap(PreferenceJournal.resolve([initial, renamed, deletion]).first)
         let payload = try XCTUnwrap(state.historicalPayload)
         XCTAssertEqual(try JSONDecoder().decode(CustomCategory.self, from: payload).name, "更新后的分类")
+    }
+}
+
+
+extension PreferenceSyncTests {
+    func test_backupDateStrategy_preservesOperationIdentityAndAcceptsRoundedLegacyMetadata() throws {
+        let initial = try seed()
+        var operation = try edit(initial, name: "备份版本", id: "backup")
+        operation.date = Date(timeIntervalSinceReferenceDate: 123456789.12345)
+        let payload = LocalBackupPayload(transactions: [], budgets: [], assets: [], wishItems: [],
+            customCategories: [category()], keywordRules: [], preferenceOperations: [initial, operation])
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let restored = try decoder.decode(LocalBackupPayload.self, from: encoder.encode(payload))
+        XCTAssertEqual(restored.preferenceOperations?.last, operation)
+        XCTAssertNoThrow(try PreferenceJournal.resolve([initial, operation] + (restored.preferenceOperations ?? [])))
+        var rounded = operation
+        rounded.date = Date(timeIntervalSince1970: floor(operation.date.timeIntervalSince1970))
+        XCTAssertNoThrow(try PreferenceJournal.resolve([initial, operation, rounded]))
     }
 }

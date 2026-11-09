@@ -15,6 +15,42 @@ struct PreferenceOperation: Codable, Equatable, Identifiable {
     var isSeed: Bool
     var date: Date
 
+    private enum CodingKeys: String, CodingKey { case version, id, kind, entityID, parents, payload, isSeed, date }
+
+    init(id: String, kind: Kind, entityID: String, parents: [String], payload: Data?, isSeed: Bool, date: Date) {
+        self.id = id; self.kind = kind; self.entityID = entityID; self.parents = parents
+        self.payload = payload; self.isSeed = isSeed; self.date = date
+    }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        version = try values.decode(Int.self, forKey: .version)
+        id = try values.decode(String.self, forKey: .id)
+        kind = try values.decode(Kind.self, forKey: .kind)
+        entityID = try values.decode(String.self, forKey: .entityID)
+        parents = try values.decode([String].self, forKey: .parents)
+        payload = try values.decodeIfPresent(Data.self, forKey: .payload)
+        isSeed = try values.decode(Bool.self, forKey: .isSeed)
+        if let seconds = try? values.decode(Double.self, forKey: .date) {
+            date = Date(timeIntervalSinceReferenceDate: seconds)
+        } else {
+            // Accept an early backup using its enclosing ISO-8601 date strategy.
+            date = try values.decode(Date.self, forKey: .date)
+        }
+    }
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(version, forKey: .version)
+        try values.encode(id, forKey: .id)
+        try values.encode(kind, forKey: .kind)
+        try values.encode(entityID, forKey: .entityID)
+        try values.encode(parents, forKey: .parents)
+        try values.encodeIfPresent(payload, forKey: .payload)
+        try values.encode(isSeed, forKey: .isSeed)
+        // The surrounding backup encoder uses ISO-8601 without fractional seconds.
+        // Keep operation metadata lossless regardless of that encoder's date strategy.
+        try values.encode(date.timeIntervalSinceReferenceDate, forKey: .date)
+    }
+
     var key: String { kind.rawValue + ":" + entityID }
     var label: String {
         guard let payload else { return "保留删除" }
@@ -104,7 +140,11 @@ final class PreferenceJournal {
             guard operation.version == 1, !operation.id.isEmpty, !operation.entityID.isEmpty,
                   !operation.parents.contains(operation.id), !(operation.isSeed && (!operation.parents.isEmpty || operation.payload == nil))
             else { throw PreferenceSyncError.invalidData }
-            if let old = byID[operation.id], old != operation { throw PreferenceSyncError.invalidData }
+            if let old = byID[operation.id] {
+                var comparable = operation
+                comparable.date = old.date // Display-only metadata may be rounded in an older backup.
+                guard old == comparable else { throw PreferenceSyncError.invalidData }
+            }
             if let payload = operation.payload {
                 switch operation.kind {
                 case .category:
@@ -114,7 +154,7 @@ final class PreferenceJournal {
                     guard rule.syncID == operation.entityID, rule.searchTexts?.first?.ruleKind == .local else { throw PreferenceSyncError.invalidData }
                 }
             }
-            byID[operation.id] = operation
+            if byID[operation.id] == nil { byID[operation.id] = operation }
         }
         // Partial CloudKit batches may contain children before their parents. Preserve the
         // projection until the whole graph is available; never infer deletions from missing rows.
