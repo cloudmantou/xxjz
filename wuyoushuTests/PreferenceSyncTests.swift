@@ -353,3 +353,16 @@ extension PreferenceSyncTests {
         XCTAssertEqual(try JSONDecoder().decode(LocalBackupPayload.self, from: PreferenceJournal.encode(current)).preferenceOperations?.count, 1)
     }
 }
+
+
+extension PreferenceSyncTests {
+    func test_deletedCategory_keepsLastCausalNameInsteadOfOriginalSeedName() throws {
+        let initial = try seed()
+        let renamed = try edit(initial, name: "更新后的分类", id: "A")
+        var deletion = try edit(initial, name: "", id: "B", delete: true)
+        deletion.parents = [renamed.id]
+        let state = try XCTUnwrap(PreferenceJournal.resolve([initial, renamed, deletion]).first)
+        let payload = try XCTUnwrap(state.historicalPayload)
+        XCTAssertEqual(try JSONDecoder().decode(CustomCategory.self, from: payload).name, "更新后的分类")
+    }
+}

@@ -31,6 +31,21 @@ struct PreferenceResolution: Identifiable {
     let heads: [PreferenceOperation]
     let history: [PreferenceOperation]
     var hasConflict: Bool { Set(heads.map(\.payload)).count > 1 }
+
+    /// Find the value known at deletion, following causal parents rather than UUID or
+    /// timestamp order. This keeps renamed categories readable on historical bills.
+    var historicalPayload: Data? {
+        if let payload = winner.payload { return payload }
+        let byID = Dictionary(uniqueKeysWithValues: history.map { ($0.id, $0) })
+        var frontier = winner.parents.sorted()
+        var visited: Set<String> = []
+        while !frontier.isEmpty {
+            let operations = frontier.compactMap { byID[$0] }.filter { visited.insert($0.id).inserted }
+            if let payload = operations.compactMap(\.payload).first { return payload }
+            frontier = operations.flatMap(\.parents).sorted()
+        }
+        return history.last(where: { $0.payload != nil })?.payload
+    }
 }
 
 enum PreferenceSyncError: LocalizedError {

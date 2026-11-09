@@ -106,7 +106,7 @@ final class PreferenceSyncCoordinator: ObservableObject {
             switch state.winner.kind {
             case .category:
                 if let payload = state.winner.payload { liveCategories.append(try JSONDecoder().decode(CustomCategory.self, from: payload)) }
-                if let payload = state.history.last(where: { $0.payload != nil })?.payload {
+                if let payload = state.historicalPayload {
                     historicalCategories.append(try JSONDecoder().decode(CustomCategory.self, from: payload))
                 }
             case .rule:
