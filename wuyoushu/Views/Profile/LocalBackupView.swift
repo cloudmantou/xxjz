@@ -25,6 +25,7 @@ struct LocalBackupDocument: FileDocument {
 
 struct LocalBackupView: View {
     @Environment(\.managedObjectContext) private var context
+    @State private var recoveryFiles: [URL] = []
     @State private var document: LocalBackupDocument?
     @State private var isExporting = false
     @State private var isImporting = false
@@ -55,6 +56,7 @@ struct LocalBackupView: View {
 
             if let pendingRestore {
                 Section("备份预览") {
+                    previewRow("账本", "\(pendingRestore.payload.ledgers?.count ?? 1)")
                     previewRow("导出时间", pendingRestore.exportedAt.formatted(date: .abbreviated, time: .shortened))
                     previewRow("账单", "\(pendingRestore.transactionCount)")
                     previewRow("预算", "\(pendingRestore.budgetCount)")
@@ -70,13 +72,24 @@ struct LocalBackupView: View {
                 }
             }
 
+            if !recoveryFiles.isEmpty {
+                Section("恢复前的本地回退版本") {
+                    ForEach(recoveryFiles, id: \.self) { url in
+                        Button((try? url.resourceValues(forKeys: [.creationDateKey]).creationDate?.formatted()) ?? "回退备份") {
+                            do { pendingRestore = try LocalBackupService.shared.decodeAndValidate(Data(contentsOf: url)) }
+                            catch { showAlert(title: "无法读取", message: error.localizedDescription) }
+                        }
+                    }
+                }
+            }
             Section {
-                Text("恢复会完整替换当前设备中的账单、预算、资产、心愿单、自定义分类和规则。请先导出当前数据作为回退备份。")
+                Text("恢复会替换个人账本、预算、资产、心愿单、自定义分类和规则；正在共享的账本保留，备份中的共享账本恢复为个人副本。恢复前自动保存本地回退版本。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .navigationTitle("完整数据备份")
+        .onAppear(perform: loadRecoveryFiles)
         .fileExporter(
             isPresented: $isExporting,
             document: document,
@@ -94,7 +107,7 @@ struct LocalBackupView: View {
             importBackup(result)
         }
         .confirmationDialog(
-            "用此备份覆盖当前全部本地数据？",
+            "用此备份恢复个人数据？",
             isPresented: $showsRestoreConfirmation,
             titleVisibility: .visible
         ) {
@@ -103,7 +116,7 @@ struct LocalBackupView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("恢复后，当前账单、预算、资产、心愿单、自定义分类和规则将被备份内容替换。")
+            Text("个人数据将被备份内容替换。正在共享的账本不被覆盖，共享备份恢复为个人副本。")
         }
         .alert(alertTitle, isPresented: Binding(
             get: { alertMessage != nil },
@@ -153,11 +166,19 @@ struct LocalBackupView: View {
         guard let pendingRestore else { return }
         do {
             try LocalBackupService.shared.restore(pendingRestore, into: context)
+            loadRecoveryFiles()
             self.pendingRestore = nil
             showAlert(title: "恢复完成", message: "本地数据已从备份恢复。")
         } catch {
             showAlert(title: "恢复失败", message: error.localizedDescription)
         }
+    }
+
+    private func loadRecoveryFiles() {
+        recoveryFiles = ((try? FileManager.default.contentsOfDirectory(at: LocalBackupService.recoveryDirectory,
+            includingPropertiesForKeys: [.creationDateKey])) ?? []).filter { $0.pathExtension == "json" }.sorted {
+                ((try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast) > ((try? $1.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast)
+            }
     }
 
     private func showAlert(title: String, message: String) {

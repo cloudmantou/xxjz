@@ -90,5 +90,9 @@
 		<string>com.assetlife.shortcuts.addRecord</string>
 		<string>com.assetlife.shortcuts.autoBill</string>
 	</array>
+	<key>CKSharingSupported</key>
+	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

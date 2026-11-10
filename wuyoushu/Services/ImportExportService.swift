@@ -347,7 +347,9 @@ final class ImportExportService: ObservableObject {
 
     func duplicateCountPreview(records: [ImportBillRecord]) throws -> ImportDuplicatePreview {
         let (confirmedFingerprints, legacyKeys) = try viewContext.performAndWait {
-            let existingTransactions = try viewContext.fetch(BookkeepingTransaction.fetchRequest())
+            let request = BookkeepingTransaction.fetchRequest()
+            LedgerStore.shared.scope(in: viewContext).apply(request)
+            let existingTransactions = try viewContext.fetch(request)
             let confirmedFingerprints = Set(existingTransactions.compactMap(\.importFingerprint))
             let legacyKeys = Set(existingTransactions.compactMap { transaction in
                 transaction.importFingerprint == nil ? Self.transactionKey(for: transaction) : nil
@@ -394,6 +396,12 @@ final class ImportExportService: ObservableObject {
         guard let coordinator = viewContext.persistentStoreCoordinator else {
             throw ImportError.persistenceUnavailable
         }
+        let targetLedger = LedgerStore.shared.scope(in: viewContext)
+        try LedgerStore.shared.requireWritable(targetLedger, in: viewContext)
+        let author = LedgerStore.shared.memberName
+        let categorySnapshots = Dictionary(uniqueKeysWithValues: Set(records.compactMap(\.matchedCategoryKey)).map { key in
+            (key, (BookkeepingCategory.find(key: key)?.localizedName, BookkeepingCategory.find(key: key)?.emoji))
+        })
         let importContext = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
         importContext.persistentStoreCoordinator = coordinator
         importContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
@@ -407,7 +415,9 @@ final class ImportExportService: ObservableObject {
                 var suspectedDuplicateSkippedCount = 0
                 var failedCount = 0
 
-                let committedTransactions = try importContext.fetch(BookkeepingTransaction.fetchRequest())
+                let request = BookkeepingTransaction.fetchRequest()
+                targetLedger.apply(request)
+                let committedTransactions = try importContext.fetch(request)
                 let confirmedFingerprints = Set(committedTransactions.compactMap(\.importFingerprint))
                 let legacyKeys = Set(committedTransactions.compactMap { transaction in
                     transaction.importFingerprint == nil ? Self.transactionKey(for: transaction) : nil
@@ -435,7 +445,7 @@ final class ImportExportService: ObservableObject {
                         continue
                     }
 
-                    _ = BookkeepingTransaction(
+                    let transaction = BookkeepingTransaction(
                         context: importContext,
                         amount: record.amount,
                         categoryKey: categoryKey,
@@ -449,6 +459,11 @@ final class ImportExportService: ObservableObject {
                         merchantName: record.merchantName,
                         importFingerprint: fingerprint
                     )
+                    try targetLedger.attach(transaction, in: importContext)
+                    transaction.creatorName = author
+                    transaction.categoryNameSnapshot = categorySnapshots[categoryKey]?.0
+                    transaction.categoryEmojiSnapshot = categorySnapshots[categoryKey]?.1
+                    try LedgerRevision.record(transaction, author: author, in: importContext)
                     importedCount += 1
                 }
 

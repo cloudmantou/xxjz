@@ -26,6 +26,7 @@ final class DayDetailViewModel: ObservableObject {
         request.sortDescriptors = [NSSortDescriptor(keyPath: \BookkeepingTransaction.date, ascending: false)]
 
         do {
+            LedgerStore.shared.scope(in: context).apply(request)
             transactions = try context.fetch(request)
             computeCategoryBreakdown()
         } catch {
@@ -37,7 +38,7 @@ final class DayDetailViewModel: ObservableObject {
 
     @MainActor
     func deleteTransaction(_ transaction: BookkeepingTransaction, context: NSManagedObjectContext) {
-        context.delete(transaction)
+        transaction.isTrashed = true
         if let error = PersistenceSaveCoordinator.save(context) {
             saveErrorMessage = error
             return

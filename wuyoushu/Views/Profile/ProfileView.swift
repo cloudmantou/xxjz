@@ -17,10 +17,7 @@ struct ProfileView: View {
     )
     private var wishItems: FetchedResults<WishlistItem>
 
-    @FetchRequest(
-        sortDescriptors: [],
-        animation: .default
-    )
+    @FetchRequest(fetchRequest: LedgerStore.shared.transactionRequest(), animation: .default)
     private var transactions: FetchedResults<BookkeepingTransaction>
 
     var totalAssetsValue: Double {
@@ -271,6 +268,14 @@ struct ProfileView: View {
 
     private var settingsSection: some View {
         VStack(spacing: 0) {
+            NavigationLink { LedgerManagementView() } label: {
+                settingsRowLabel(icon: "books.vertical.fill", color: .warmTeal, title: "账本与共同攒钱")
+            }
+            Divider().padding(.leading, 44)
+            NavigationLink { ICloudBackupView() } label: {
+                settingsRowLabel(icon: "icloud.and.arrow.up", color: .warmTeal, title: "iCloud 备份")
+            }
+            Divider().padding(.leading, 44)
             iCloudSyncStatusRow
             Divider().padding(.leading, 44)
             NavigationLink {

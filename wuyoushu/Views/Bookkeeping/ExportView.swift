@@ -236,6 +236,7 @@ final class ExportViewModel: ObservableObject {
             NSSortDescriptor(keyPath: \BookkeepingTransaction.date, ascending: false)
         ]
 
+        LedgerStore.shared.scope(in: context).apply(request)
         let result: [BookkeepingTransaction] = try context.fetch(request)
         return result
     }

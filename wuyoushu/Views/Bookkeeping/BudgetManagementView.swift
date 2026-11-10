@@ -324,6 +324,7 @@ struct BudgetManagementView: View {
         )
 
         do {
+            LedgerStore.shared.scope(in: viewContext).apply(request)
             let existing = try viewContext.fetch(request)
             if let entry = existing.first {
                 entry.monthlyAmount = amount

@@ -13,6 +13,11 @@ final class BookkeepingTransaction: NSManagedObject, Identifiable {
         NSFetchRequest<BookkeepingTransaction>(entityName: "BookkeepingTransaction")
     }
 
+    @NSManaged var ledgerRaw: Ledger?
+    @NSManaged var isTrashed: Bool
+    @NSManaged var creatorName: String
+    @NSManaged var categoryNameSnapshot: String?
+    @NSManaged var categoryEmojiSnapshot: String?
     @NSManaged var id: UUID
     @NSManaged var amount: Double
     @NSManaged var categoryKey: String
@@ -57,14 +62,22 @@ final class BookkeepingTransaction: NSManagedObject, Identifiable {
         self.billSource = billSource
         self.merchantName = merchantName
         self.importFingerprint = importFingerprint
+        if entity.attributesByName["isTrashed"] != nil {
+            self.isTrashed = false
+            self.creatorName = ""
+            if Thread.isMainThread {
+                self.categoryNameSnapshot = BookkeepingCategory.find(key: categoryKey)?.localizedName
+                self.categoryEmojiSnapshot = BookkeepingCategory.find(key: categoryKey)?.emoji
+            }
+        }
     }
 
     var categoryName: String {
-        BookkeepingCategory.find(key: categoryKey)?.localizedName ?? categoryKey
+        BookkeepingCategory.find(key: categoryKey)?.localizedName ?? categoryNameSnapshot ?? categoryKey
     }
 
     var categoryEmoji: String {
-        BookkeepingCategory.find(key: categoryKey)?.emoji ?? "📦"
+        BookkeepingCategory.find(key: categoryKey)?.emoji ?? categoryEmojiSnapshot ?? "📦"
     }
 
     var subcategoryName: String? {

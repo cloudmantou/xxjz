@@ -6,10 +6,8 @@ struct BookkeepingTabView: View {
     @EnvironmentObject private var router: AppRouter
     @Environment(\.managedObjectContext) private var viewContext
 
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \BookkeepingTransaction.date, ascending: false)],
-        animation: .default
-    )
+    @FetchRequest(fetchRequest: LedgerStore.shared.transactionRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \BookkeepingTransaction.date, ascending: false)]), animation: .default)
     private var allTransactions: FetchedResults<BookkeepingTransaction>
 
     @State private var selectedSegment = 0  // 0=记账, 1=账单, 2=统计

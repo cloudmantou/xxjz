@@ -30,10 +30,8 @@ struct StatisticsHomeView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @StateObject private var viewModel = BookkeepingViewModel()
 
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \BookkeepingTransaction.date, ascending: false)],
-        animation: .default
-    )
+    @FetchRequest(fetchRequest: LedgerStore.shared.transactionRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \BookkeepingTransaction.date, ascending: false)]), animation: .default)
     private var allTransactions: FetchedResults<BookkeepingTransaction>
 
     @State private var selectedSection: StatisticsSection = .trend
@@ -89,7 +87,7 @@ struct StatisticsHomeView: View {
             .map { key, amount in
                 let category = BookkeepingCategory.find(key: key)
                 return (
-                    name: category?.localizedName ?? key,
+                    name: category?.localizedName ?? rankTransactions.first(where: { $0.categoryKey == key })?.categoryName ?? key,
                     amount: amount,
                     count: countMap[key, default: 0]
                 )
@@ -177,7 +175,8 @@ struct StatisticsHomeView: View {
                 }
             }
             .background(Color.appPageBackground)
-            .navigationTitle("统计")
+            .navigationTitle("统计 · " + LedgerStore.shared.selectedName)
+            .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { _ in reloadStatistics() }
             .onAppear {
                 reloadStatistics()
             }
@@ -384,7 +383,7 @@ struct StatisticsHomeView: View {
             data: viewModel.categoryBreakdown.enumerated().map { index, item in
                 let cat = BookkeepingCategory.find(key: item.category)
                 return (
-                    name: cat?.localizedName ?? item.category,
+                    name: cat?.localizedName ?? allTransactions.first(where: { $0.categoryKey == item.category })?.categoryName ?? item.category,
                     value: item.amount,
                     color: Color.chartColor(at: index)
                 )
@@ -397,7 +396,7 @@ struct StatisticsHomeView: View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(viewModel.categoryBreakdown.prefix(5).enumerated()), id: \.offset) { index, item in
                 let cat = BookkeepingCategory.find(key: item.category)
-                let name = cat?.localizedName ?? item.category
+                let name = cat?.localizedName ?? allTransactions.first(where: { $0.categoryKey == item.category })?.categoryName ?? item.category
                 let pct = viewModel.monthlyExpense > 0 ? item.amount / viewModel.monthlyExpense * 100 : 0
 
                 HStack(spacing: 6) {

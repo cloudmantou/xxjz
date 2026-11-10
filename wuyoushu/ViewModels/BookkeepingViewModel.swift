@@ -53,6 +53,7 @@ final class BookkeepingViewModel: ObservableObject {
         )
 
         do {
+            LedgerStore.shared.scope(in: context).apply(request)
             let transactions = try context.fetch(request)
             monthlyIncome = transactions.filter(\.contributesToIncome).reduce(0) { $0 + $1.normalizedAmount }
             monthlyExpense = transactions.filter { $0.contributesToExpense && !$0.notInBudget }.reduce(0) { $0 + $1.normalizedAmount }
@@ -98,6 +99,7 @@ final class BookkeepingViewModel: ObservableObject {
             request.predicate = NSPredicate(format: "date >= %@ AND date <= %@", start as NSDate, end as NSDate)
 
             do {
+                LedgerStore.shared.scope(in: context).apply(request)
                 let transactions = try context.fetch(request)
                 let income = transactions.filter(\.contributesToIncome).reduce(0) { $0 + $1.normalizedAmount }
                 let expense = transactions.filter { $0.contributesToExpense && !$0.notInBudget }.reduce(0) { $0 + $1.normalizedAmount }
@@ -118,6 +120,7 @@ final class BookkeepingViewModel: ObservableObject {
         request.predicate = NSPredicate(format: "month == %@", startOfMonth as NSDate)
 
         do {
+            LedgerStore.shared.scope(in: context).apply(request)
             let entries = try context.fetch(request)
             totalBudget = entries.reduce(0) { $0 + $1.monthlyAmount }
 
@@ -131,6 +134,7 @@ final class BookkeepingViewModel: ObservableObject {
                 "transfer"
             )
 
+            LedgerStore.shared.scope(in: context).apply(txRequest)
             let transactions = try context.fetch(txRequest)
             var spentMap: [String: Double] = [:]
             for t in transactions where t.contributesToExpense && !t.notInBudget {

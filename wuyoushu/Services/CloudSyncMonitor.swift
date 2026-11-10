@@ -46,8 +46,28 @@ struct CloudSyncState {
     }
 
     var activities: [Phase: Activity] = [:]
+    private var storeActivities: [String: [Phase: Activity]] = [:]
 
-    mutating func receive(id: UUID, phase: Phase, start: Date, end: Date?, succeeded: Bool, failure: Failure?) {
+    mutating func receive(id: UUID, phase: Phase, start: Date, end: Date?, succeeded: Bool, failure: Failure?, storeIdentifier: String? = nil) {
+        if let storeIdentifier {
+            var single = CloudSyncState()
+            single.activities = storeActivities[storeIdentifier] ?? [:]
+            single.receive(id: id, phase: phase, start: start, end: end, succeeded: succeeded, failure: failure)
+            storeActivities[storeIdentifier] = single.activities
+            // Success in the private store cannot clear an unresolved shared-store failure.
+            for p in Phase.allCases {
+                var combined = Activity()
+                for key in storeActivities.keys.sorted() {
+                    guard let item = storeActivities[key]?[p] else { continue }
+                    combined.active.merge(item.active) { _, new in new }
+                    if let date = item.lastSuccess { combined.lastSuccess = max(combined.lastSuccess ?? .distantPast, date) }
+                    if let date = item.lastResultStart { combined.lastResultStart = max(combined.lastResultStart ?? .distantPast, date) }
+                    if let failure = item.failure { combined.failure = failure }
+                }
+                activities[p] = combined
+            }
+            return
+        }
         var activity = activities[phase] ?? Activity()
         guard let end else {
             activity.active[id] = start
@@ -143,7 +163,7 @@ final class CloudSyncMonitor: ObservableObject {
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.observationID == generation, self.isEnabled else { return }
                 self.state.receive(id: event.identifier, phase: phase, start: event.startDate,
-                                   end: event.endDate, succeeded: event.succeeded, failure: failure)
+                                   end: event.endDate, succeeded: event.succeeded, failure: failure, storeIdentifier: event.storeIdentifier)
                 self.writeDiagnostics()
             }
         }

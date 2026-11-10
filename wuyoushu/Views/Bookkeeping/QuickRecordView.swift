@@ -218,7 +218,7 @@ struct QuickRecordView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Text("记一笔")
+                LedgerPicker()
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundColor(.primary)
             }
@@ -1572,6 +1572,7 @@ struct QuickRecordView: View {
             roundedAmount + 0.01
         )
 
+        LedgerStore.shared.scope(in: viewContext).apply(request)
         guard let matches = try? viewContext.fetch(request), !matches.isEmpty else {
             return nil
         }
@@ -1597,35 +1598,8 @@ struct QuickRecordView: View {
             .replacingOccurrences(of: "\\s+", with: "", options: .regularExpression)
     }
 
-    private func updateWidgetData() {
-        guard let defaults = UserDefaults(suiteName: Constants.Bookkeeping.widgetSuiteName) else { return }
+    private func updateWidgetData() { LedgerStore.shared.updateWidget() }
 
-        let today = Date()
-        let dayStart = today.startOfDay
-        let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart.addingTimeInterval(86_400)
-        let request: NSFetchRequest<BookkeepingTransaction> = BookkeepingTransaction.fetchRequest()
-        request.predicate = NSPredicate(
-            format: "date >= %@ AND date < %@ AND isIncome == NO AND categoryKey != %@",
-            dayStart as NSDate,
-            dayEnd as NSDate,
-            "transfer"
-        )
-
-        do {
-            let transactions = try viewContext.fetch(request)
-            let totalExpense = transactions.reduce(0.0) { $0 + $1.normalizedAmount }
-            let summary = TodaySummary(
-                totalExpense: totalExpense,
-                transactionCount: transactions.count,
-                dateString: today.shortDateString
-            )
-            if let data = try? JSONEncoder().encode(summary) {
-                defaults.set(data, forKey: Constants.Bookkeeping.widgetTodaySummaryKey)
-            }
-        } catch {
-            // Silent
-        }
-    }
 }
 
 // MARK: - Record Details Sheet

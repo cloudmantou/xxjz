@@ -3,10 +3,8 @@ import CoreData
 
 struct TransactionListView: View {
     @Environment(\.bottomBarInset) private var bottomBarInset: CGFloat
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \BookkeepingTransaction.date, ascending: false)],
-        animation: .default
-    )
+    @FetchRequest(fetchRequest: LedgerStore.shared.transactionRequest(
+        sortDescriptors: [NSSortDescriptor(keyPath: \BookkeepingTransaction.date, ascending: false)]), animation: .default)
     private var allTransactions: FetchedResults<BookkeepingTransaction>
 
     @State private var searchText = ""

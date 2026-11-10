@@ -33,8 +33,7 @@ final class PreferenceSyncCoordinator: ObservableObject {
 
     func start(container: NSPersistentContainer) {
         isConfigured = true
-        guard container.persistentStoreCoordinator.persistentStores.count == 1,
-              let store = container.persistentStoreCoordinator.persistentStores.first else {
+        guard let store = container.persistentStoreCoordinator.persistentStores.first(where: { $0.configurationName != "Shared" }) else {
             errorMessage = PreferenceSyncError.unavailable.localizedDescription; return
         }
         journal = PreferenceJournal(container: container)

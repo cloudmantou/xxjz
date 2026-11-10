@@ -31,14 +31,10 @@ struct DashboardView: View {
     init() {
         let start = Date().startOfDay
         let end = Calendar.current.date(byAdding: .day, value: 1, to: start) ?? start.addingTimeInterval(86_400)
-        _dayTransactions = FetchRequest(
-            sortDescriptors: [
-                NSSortDescriptor(keyPath: \BookkeepingTransaction.date, ascending: false),
-                NSSortDescriptor(keyPath: \BookkeepingTransaction.createdAt, ascending: false)
-            ],
+        _dayTransactions = FetchRequest(fetchRequest: LedgerStore.shared.transactionRequest(
             predicate: NSPredicate(format: "date >= %@ AND date < %@", start as NSDate, end as NSDate),
-            animation: .default
-        )
+            sortDescriptors: [NSSortDescriptor(keyPath: \BookkeepingTransaction.date, ascending: false),
+                              NSSortDescriptor(keyPath: \BookkeepingTransaction.createdAt, ascending: false)]), animation: .default)
     }
 
     private var allDayTransactions: [BookkeepingTransaction] {
@@ -116,7 +112,7 @@ struct DashboardView: View {
     }
 
     private func deleteTransaction(_ tx: BookkeepingTransaction) {
-        viewContext.delete(tx)
+        tx.isTrashed = true
         saveErrorMessage = PersistenceSaveCoordinator.save(viewContext)
         pendingDeleteTransaction = nil
     }
@@ -124,11 +120,11 @@ struct DashboardView: View {
     private func updatePredicate(for date: Date) {
         let start = date.startOfDay
         let end = Calendar.current.date(byAdding: .day, value: 1, to: start) ?? start.addingTimeInterval(86_400)
-        dayTransactions.nsPredicate = NSPredicate(
+        dayTransactions.nsPredicate = LedgerStore.shared.scope(in: viewContext).predicate(NSPredicate(
             format: "date >= %@ AND date < %@",
             start as NSDate,
             end as NSDate
-        )
+        ))
     }
 
     // MARK: - Background
@@ -141,7 +137,7 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: DS.Space.s) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(headerOverline)
+                    LedgerPicker()
                         .font(.dsOverline)
                         .foregroundStyle(Color.textTertiary)
                     Text(router.isViewingToday ? "今天" : router.selectedReceiptDate.formatted(as: "M月d日"))
@@ -182,7 +178,7 @@ struct DashboardView: View {
 
     private var headerOverline: String {
         let weekday = router.selectedReceiptDate.formatted(as: "EEEE")
-        return "默认账本 · \(weekday)"
+        return "\(LedgerStore.shared.selectedName) · \(weekday)"
     }
 
     // MARK: - Date Navigator

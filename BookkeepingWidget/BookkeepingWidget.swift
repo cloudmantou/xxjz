@@ -5,6 +5,7 @@ struct BookkeepingEntry: TimelineEntry {
     let date: Date
     let totalExpense: Double
     let transactionCount: Int
+    var ledgerName: String? = nil
 }
 
 struct BookkeepingProvider: TimelineProvider {
@@ -30,7 +31,8 @@ struct BookkeepingProvider: TimelineProvider {
         return BookkeepingEntry(
             date: Date(),
             totalExpense: summary?.totalExpense ?? 0,
-            transactionCount: summary?.transactionCount ?? 0
+            transactionCount: summary?.transactionCount ?? 0,
+            ledgerName: summary?.ledgerName
         )
     }
 }
@@ -40,7 +42,8 @@ struct BookkeepingWidgetEntryView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Text("今日支出")
+            Text("\(entry.ledgerName ?? "个人账本") · 今日支出")
+                .lineLimit(1)
                 .font(.caption)
                 .foregroundColor(.secondary)
 
