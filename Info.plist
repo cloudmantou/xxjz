@@ -92,5 +92,7 @@
 	</array>
 	<key>CKSharingSupported</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

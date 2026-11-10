@@ -2,6 +2,9 @@ import Foundation
 import CoreData
 import Combine
 import SwiftUI
+#if DEBUG
+import CloudKit
+#endif
 
 @MainActor
 enum PersistenceSaveCoordinator {
@@ -155,7 +158,71 @@ final class PersistenceController: ObservableObject {
         loadFailure = loaded.error?.localizedDescription
         configureViewContext(container)
         cloudSync.configure(requested: requested, enabled: loaded.cloudSyncEnabled, storeError: loaded.cloudError)
+        #if DEBUG
+        if runtimeAvailable && ProcessInfo.processInfo.arguments.contains("--initialize-cloudkit-schema") {
+            Task.detached { await Self.initializeDevelopmentSchema() }
+        }
+        #endif
     }
+
+    #if DEBUG
+    /// Explicit release-engineering operation. Uses a separate store and synthetic
+    /// backup payload; never restores or modifies the user's local financial store.
+    private static func initializeDevelopmentSchema() async {
+        let reportURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("CloudKitSchemaBootstrap.json")
+        var report: [String: String] = ["status": "running"]
+        func writeReport() {
+            if let data = try? JSONSerialization.data(withJSONObject: report, options: [.sortedKeys]) {
+                try? data.write(to: reportURL, options: .atomic)
+            }
+        }
+        writeReport()
+        do {
+            // A private-only container avoids attempting schema initialization in
+            // the shared database. Apple generates and removes representative rows.
+            let model = makeModel(enableUniqueConstraints: false)
+            let schemaContainer = NSPersistentCloudKitContainer(name: "AssetLifeSchema", managedObjectModel: model)
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Schema-" + UUID().uuidString)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let description = makeStoreDescription(storeURL: directory.appendingPathComponent("Schema.sqlite"),
+                inMemory: false, cloudSyncEnabled: true)
+            description.configuration = "Private"
+            description.shouldAddStoreAsynchronously = false
+            schemaContainer.persistentStoreDescriptions = [description]
+            if let error = loadPersistentStoresSync(container: schemaContainer) { throw error }
+            try schemaContainer.initializeCloudKitSchema(options: [])
+            if let error = detachStores(from: schemaContainer) { throw error }
+            report["coreData"] = "initialized"
+            writeReport()
+
+            let database = CKContainer(identifier: Constants.ICloud.containerIdentifier).privateCloudDatabase
+            let zoneID = CKRecordZone.ID(zoneName: "XXJZSchemaValidation", ownerName: CKCurrentUserDefaultName)
+            _ = try await database.save(CKRecordZone(zoneID: zoneID))
+            let record = CKRecord(recordType: "XXJZBackupSnapshot", recordID: CKRecord.ID(recordName: UUID().uuidString, zoneID: zoneID))
+            let payloadURL = directory.appendingPathComponent("synthetic.json")
+            let payload = Data("{\"schemaValidation\":true}".utf8)
+            try payload.write(to: payloadURL)
+            record["name"] = "Schema validation" as CKRecordValue
+            record["createdAt"] = Date() as CKRecordValue
+            record["byteCount"] = payload.count as CKRecordValue
+            record["checksum"] = PreferenceJournal.hash(payload) as CKRecordValue
+            record["formatVersion"] = 1 as CKRecordValue
+            record["payload"] = CKAsset(fileURL: payloadURL)
+            let saved = try await database.save(record)
+            let fetched = try await database.record(for: saved.recordID)
+            guard let asset = fetched["payload"] as? CKAsset, let url = asset.fileURL,
+                  try Data(contentsOf: url) == payload else { throw CloudBackupError.invalidData }
+            _ = try await database.deleteRecord(withID: saved.recordID)
+            report["backupAssetRoundTrip"] = "passed"
+            report["status"] = "succeeded"
+        } catch {
+            report["status"] = "failed"
+            report["error"] = error.localizedDescription
+        }
+        writeReport()
+    }
+    #endif
 
     var isStoreReady: Bool { loadFailure == nil }
 
